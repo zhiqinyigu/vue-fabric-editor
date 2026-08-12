@@ -12,6 +12,10 @@ class WorkspacePlugin {
         this.canvas = canvas;
         this.editor = editor;
         this.workspace = null;
+        this.backgroundImageDataUrl = null;
+        this.backgroundImageMode = 'cover';
+        this.backgroundImageOpacity = 1;
+        this.backgroundImageSize = null;
         this.init({
             width: 900,
             height: 1200,
@@ -43,6 +47,8 @@ class WorkspacePlugin {
                     this.editor.emit('sizeChange', workspace.width, workspace.height);
                 }
             }
+            // 记录从 JSON 加载的背景图数据，供后续 resize 同步
+            this._captureBackgroundImage();
             resolve('');
         });
     }
@@ -117,6 +123,8 @@ class WorkspacePlugin {
         this.workspace.set('width', width);
         this.workspace.set('height', height);
         this.editor.emit('sizeChange', this.workspace.width, this.workspace.height);
+        // 同步背景图尺寸
+        this._syncBackgroundImage();
         this.auto();
     }
     setZoomAuto(scale, cb) {
@@ -173,6 +181,179 @@ class WorkspacePlugin {
         const workspase = this.getWorkspase();
         workspase === null || workspase === void 0 ? void 0 : workspase.set('fill', color);
     }
+    // ================= 背景图 =================
+    // 获取背景图对象
+    _getBackgroundImageObj() {
+        return this.canvas.getObjects().find((item) => item.id === 'backgroundImage') || null;
+    }
+    // 设置背景图（dataUrl：图片地址；mode：cover 填满 / contain 完整 / tile 平铺）
+    setBackgroundImage(dataUrl, mode = 'cover') {
+        const workspace = this.getWorkspase();
+        if (!workspace || !dataUrl) {
+            return;
+        }
+        // 移除旧的（会重置状态）
+        this.removeBackgroundImage();
+        this.backgroundImageMode = mode;
+        const img = new Image();
+        img.onload = () => {
+            const imgW = img.naturalWidth || img.width;
+            const imgH = img.naturalHeight || img.height;
+            if (!imgW || !imgH) {
+                return;
+            }
+            this.backgroundImageSize = { w: imgW, h: imgH };
+            this.backgroundImageDataUrl = dataUrl;
+            const bgObj = this._createBackgroundObject(img, imgW, imgH, workspace, mode);
+            const wsIndex = this.canvas.getObjects().indexOf(workspace);
+            this.canvas.insertAt(bgObj, wsIndex + 1);
+            bgObj.set('opacity', this.backgroundImageOpacity);
+            this.canvas.requestRenderAll();
+            // 显式记录历史（insertAt 仅触发 object:added，HistoryPlugin 不监听该事件）
+            if (this.editor.saveState) {
+                this.editor.saveState();
+            }
+        };
+        img.onerror = () => {
+            console.error('背景图加载失败');
+        };
+        img.src = dataUrl;
+    }
+    // 创建背景对象（cover/contain 用 Image，tile 用 Pattern 填充的 Rect）
+    _createBackgroundObject(img, imgW, imgH, workspace, mode) {
+        const rectW = workspace.width * workspace.scaleX;
+        const rectH = workspace.height * workspace.scaleY;
+        if (mode === 'tile') {
+            const pattern = new fabric.Pattern({ source: img, repeat: 'repeat' });
+            return new fabric.Rect({
+                left: workspace.left,
+                top: workspace.top,
+                width: rectW,
+                height: rectH,
+                fill: pattern,
+                id: 'backgroundImage',
+                backgroundImageMode: 'tile',
+                selectable: false,
+                evented: false,
+                hasControls: false,
+                hoverCursor: 'default',
+                lockMovementX: true,
+                lockMovementY: true,
+            });
+        }
+        const rectRatio = rectW / rectH;
+        const imgRatio = imgW / imgH;
+        let scale;
+        if (mode === 'contain') {
+            // contain 整体可见，取较小缩放
+            scale = rectRatio > imgRatio ? rectH / imgH : rectW / imgW;
+        } else {
+            // cover 铺满裁剪，取较大缩放
+            scale = rectRatio > imgRatio ? rectW / imgW : rectH / imgH;
+        }
+        const width = imgW * scale;
+        const height = imgH * scale;
+        return new fabric.Image(img, {
+            left: workspace.left + (rectW - width) / 2,
+            top: workspace.top + (rectH - height) / 2,
+            scaleX: scale,
+            scaleY: scale,
+            id: 'backgroundImage',
+            backgroundImageMode: mode,
+            selectable: false,
+            evented: false,
+            hasControls: false,
+            hoverCursor: 'default',
+            lockMovementX: true,
+            lockMovementY: true,
+        });
+    }
+    // 移除背景图
+    removeBackgroundImage() {
+        const obj = this._getBackgroundImageObj();
+        if (obj) {
+            this.canvas.remove(obj);
+        }
+        this.backgroundImageDataUrl = null;
+        this.backgroundImageMode = 'cover';
+        this.backgroundImageSize = null;
+        this.canvas.requestRenderAll();
+    }
+    // 背景图透明度（0-1）
+    setBackgroundOpacity(opacity) {
+        this.backgroundImageOpacity = opacity;
+        const obj = this._getBackgroundImageObj();
+        if (obj) {
+            obj.set('opacity', opacity);
+            this.canvas.requestRenderAll();
+        }
+    }
+    // 获取背景图信息（用于回显）
+    getBackgroundImage() {
+        const obj = this._getBackgroundImageObj();
+        if (!obj) {
+            return null;
+        }
+        let src = '';
+        let mode = obj.backgroundImageMode || this.backgroundImageMode || 'cover';
+        if (obj.type === 'image') {
+            src = obj.getSrc();
+        } else if (obj.type === 'rect' && obj.fill && obj.fill.source) {
+            src = obj.fill.source.src;
+            mode = 'tile';
+        }
+        return {
+            src,
+            mode,
+            opacity: obj.opacity,
+        };
+    }
+    // 画布尺寸调整为背景图原始尺寸
+    fitCanvasToBackground() {
+        const size = this.backgroundImageSize;
+        if (size && size.w && size.h) {
+            this.setSize(size.w, size.h);
+        }
+    }
+    // 画布尺寸变化后同步背景图
+    _syncBackgroundImage() {
+        if (this.backgroundImageDataUrl) {
+            this.setBackgroundImage(this.backgroundImageDataUrl, this.backgroundImageMode);
+        }
+    }
+    // 从画布捕获背景图数据（loadJSON 后调用）
+    _captureBackgroundImage() {
+        const info = this.getBackgroundImage();
+        if (info && info.src) {
+            this.backgroundImageDataUrl = info.src;
+            this.backgroundImageMode = info.mode;
+            this.backgroundImageOpacity = info.opacity != null ? info.opacity : 1;
+            const obj = this._getBackgroundImageObj();
+            if (obj && obj.type === 'image') {
+                const el = obj._element;
+                this.backgroundImageSize = {
+                    w: (el && (el.naturalWidth || el.width)) || obj.width,
+                    h: (el && (el.naturalHeight || el.height)) || obj.height,
+                };
+            } else if (obj && obj.type === 'rect' && obj.fill && obj.fill.source) {
+                const el = obj.fill.source;
+                this.backgroundImageSize = {
+                    w: (el && (el.naturalWidth || el.width)) || obj.width,
+                    h: (el && (el.naturalHeight || el.height)) || obj.height,
+                };
+            }
+        } else {
+            this.backgroundImageDataUrl = null;
+            this.backgroundImageSize = null;
+        }
+    }
+    // 清空背景图状态（画布 clear 时调用）
+    _clearBackgroundImageState() {
+        this.backgroundImageDataUrl = null;
+        this.backgroundImageMode = 'cover';
+        this.backgroundImageOpacity = 1;
+        this.backgroundImageSize = null;
+    }
     _bindWheel() {
         this.canvas.on('mouse:wheel', function (opt) {
             const delta = opt.e.deltaY;
@@ -205,5 +386,10 @@ WorkspacePlugin.apis = [
     'getWorkspase',
     'setWorkspaseBg',
     'setCenterFromObject',
+    'setBackgroundImage',
+    'removeBackgroundImage',
+    'setBackgroundOpacity',
+    'getBackgroundImage',
+    'fitCanvasToBackground',
 ];
 export default WorkspacePlugin;

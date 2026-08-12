@@ -147,6 +147,7 @@ class ServersPlugin {
             'extension',
             'verticalAlign',
             'roundValue',
+            'backgroundImageMode',
         ];
     }
     /**
@@ -289,8 +290,12 @@ class ServersPlugin {
             }
         });
         (_a = this.editor) === null || _a === void 0 ? void 0 : _a.setWorkspaseBg('#fff');
+        // 重置背景图状态
+        const workspacePlugin = this.editor && this.editor.getPlugin('WorkspacePlugin');
+        workspacePlugin && workspacePlugin._clearBackgroundImageState && workspacePlugin._clearBackgroundImageState();
         this.canvas.discardActiveObject();
         this.canvas.renderAll();
+        this.editor.emit('clear');
     }
     destroy() {
         console.log('pluginDestroy');

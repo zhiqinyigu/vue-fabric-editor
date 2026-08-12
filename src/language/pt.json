@@ -4,7 +4,18 @@
     "color": "Cor",
     "colorMacthing": "Combinação de cores",
     "width": "Largura",
-    "height": "Altura"
+    "height": "Altura",
+    "image": "Imagem de fundo",
+    "uploadImage": "Carregar imagem de fundo",
+    "reUpload": "Substituir",
+    "removeImage": "Remover",
+    "fillMode": "Modo de preenchimento",
+    "cover": "Cobrir",
+    "contain": "Conter",
+    "tile": "Ladrilho",
+    "opacity": "Opacidade",
+    "fitCanvas": "Sincronizar tamanho da tela",
+    "uploadTip": "Clique ou arraste para carregar"
   },
   "sizeSetting": {
   },

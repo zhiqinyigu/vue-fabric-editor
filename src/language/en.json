@@ -4,7 +4,18 @@
     "color": "Color",
     "colorMacthing": "Color match",
     "width": "Width",
-    "height": "Height"
+    "height": "Height",
+    "image": "Background Image",
+    "uploadImage": "Upload background image",
+    "reUpload": "Replace",
+    "removeImage": "Remove",
+    "fillMode": "Fill Mode",
+    "cover": "Cover",
+    "contain": "Contain",
+    "tile": "Tile",
+    "opacity": "Opacity",
+    "fitCanvas": "Sync canvas size",
+    "uploadTip": "Click or drag to upload"
   },
   "sizeSetting": {
   },

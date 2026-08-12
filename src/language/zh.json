@@ -4,7 +4,18 @@
     "color": "颜色",
     "colorMacthing": "配色",
     "width": "宽度",
-    "height": "高度"
+    "height": "高度",
+    "image": "背景图片",
+    "uploadImage": "上传背景图片",
+    "reUpload": "更换",
+    "removeImage": "移除",
+    "fillMode": "铺满方式",
+    "cover": "填满",
+    "contain": "完整",
+    "tile": "平铺",
+    "opacity": "透明度",
+    "fitCanvas": "同步画布尺寸",
+    "uploadTip": "点击或拖拽上传"
   },
   "sizeSetting": {
   },
