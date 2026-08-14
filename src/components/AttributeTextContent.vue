@@ -45,6 +45,8 @@ export default {
         baseAttr[key] = value;
         if (key === 'text') {
           activeObject.set(key, value);
+          // 文本变化会重算尺寸，触发属性面板（尺寸/位置）刷新
+          canvasEditor.emit('selectOne', [activeObject]);
         } else {
           const path = activeObject.get('path');
           path.set(key, value);

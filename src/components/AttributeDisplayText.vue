@@ -192,12 +192,22 @@ export default {
       canvasEditor.on('selectCancel', selectCancel);
       canvasEditor.on('selectOne', getObjectAttr);
       canvasEditor.canvas.on('object:modified', getObjectAttr);
+      // 拖拽/移动/旋转过程中实时刷新尺寸
+      canvasEditor.canvas.on('object:moving', getObjectAttr);
+      canvasEditor.canvas.on('object:rotating', getObjectAttr);
+      canvasEditor.canvas.on('object:resizing', getObjectAttr);
+      // 编辑态键入时实时刷新宽高（fabric 每次键入触发 text:changed）
+      canvasEditor.canvas.on('text:changed', getObjectAttr);
     });
 
     onBeforeUnmount(() => {
       canvasEditor.off('selectCancel', selectCancel);
       canvasEditor.off('selectOne', getObjectAttr);
       canvasEditor.canvas.off('object:modified', getObjectAttr);
+      canvasEditor.canvas.off('object:moving', getObjectAttr);
+      canvasEditor.canvas.off('object:rotating', getObjectAttr);
+      canvasEditor.canvas.off('object:resizing', getObjectAttr);
+      canvasEditor.canvas.off('text:changed', getObjectAttr);
     });
 
     return {
