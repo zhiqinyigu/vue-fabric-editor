@@ -20,6 +20,7 @@ npm run build        # 构建应用站点
 npm run build:lib    # 构建编辑器库 → dist/vue-fabric-editor/
 npm test             # 运行 jest 测试
 npm run typecheck    # 校验 types/*.d.ts（消费侧冒烟用例，见「组件文档 - 类型声明」）
+npm run test:layer   # layer.vue 拖拽排序手动验证脚本（JSDOM + mock-env，独立于 jest）
 ```
 
 ## 最小消费工程示例

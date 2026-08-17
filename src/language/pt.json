@@ -82,6 +82,7 @@
     "save_as_json": "Salvar como JSON"
   },
   "layers": "Camadas",
+  "emptyLayer": "Sem camadas",
   "importFiles": {
     "file": "Arquivo",
     "createDesign": {

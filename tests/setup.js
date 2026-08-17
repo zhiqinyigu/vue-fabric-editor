@@ -6,11 +6,10 @@
  */
 const Module = require('module');
 const origLoad = Module._load;
-Module._load = function (request, parent, isMain) {
+Module._load = function (request) {
   if (request === 'canvas') {
-    return {
-      createCanvas: () => ({ getContext: () => ({}), toBuffer: () => Buffer.alloc(0) }),
-    };
+    // 与 jest moduleNameMapper 共用同一份 stub（含 jsdom 需要的 Canvas.Image）
+    return require('./__mocks__/canvas');
   }
   return origLoad.apply(this, arguments);
 };

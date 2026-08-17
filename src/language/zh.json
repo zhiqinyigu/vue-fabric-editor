@@ -82,6 +82,7 @@
     "save_as_json": "保存为JSON"
   },
   "layers": "图层",
+  "emptyLayer": "暂无图层",
   "importFiles": {
     "file": "文件",
     "createDesign": {
