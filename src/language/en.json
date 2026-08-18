@@ -99,6 +99,7 @@
     "importJsonStrError": "Invalid JSON format, please check and retry",
     "importJsonStrSuccess": "Imported successfully"
   },
+  "imageOps": "Image",
   "repleaceImg": "Replace Image",
   "cropperImg": "Crop image",
   "editClip": "Edit clip",

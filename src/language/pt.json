@@ -99,6 +99,7 @@
     "importJsonStrError": "Formato JSON inválido, verifique e tente novamente",
     "importJsonStrSuccess": "Importado com sucesso"
   },
+  "imageOps": "Imagem",
   "repleaceImg": "Substituir imagem",
   "cropperImg": "Recortar imagem",
   "editClip": "Editar recorte",

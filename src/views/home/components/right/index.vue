@@ -1,5 +1,5 @@
 <script>
-import { inject, ref } from '@vue/composition-api';
+import { inject, ref, onMounted, onBeforeUnmount } from '@vue/composition-api';
 import Align from '@/components/Align.vue';
 
 import Hide from '@/components/Hide.vue';
@@ -93,6 +93,45 @@ export default {
       }
     };
 
+    // 当前选中图片的类型：normal 普通图片 / online 网络图片 / variable 变量图片
+    const imageType = ref('normal');
+
+    const isOnlineUrl = (src) => typeof src === 'string' && /^https?:\/\/.+$/i.test(src);
+
+    // 变量插件（判断 URL 是否含变量包裹符）
+    const getVariablePlugin = () => canvasEditor.getPlugin?.('VariablePlugin') || null;
+    const isVariableImage = (obj, src) => {
+      if (!obj || typeof src !== 'string') return false;
+      if (obj.get('isVariableImage') === true) return true;
+      const vp = getVariablePlugin();
+      return !!(vp && vp.containsVariable && vp.containsVariable(src));
+    };
+    // 变量图片优先于网络图片判断（变量 URL 通常也是 http/https 开头）
+    const refreshImageType = () => {
+      imageType.value = 'normal';
+      const activeObject = canvasEditor.canvas.getActiveObject();
+      if (activeObject && activeObject.type === 'image' && activeObject.getSrc) {
+        const src = activeObject.getSrc();
+        if (isVariableImage(activeObject, src)) {
+          imageType.value = 'variable';
+        } else if (isOnlineUrl(src)) {
+          imageType.value = 'online';
+        }
+      }
+    };
+
+    onMounted(() => {
+      refreshImageType();
+      canvasEditor.on('selectOne', refreshImageType);
+      canvasEditor.on('selectCancel', refreshImageType);
+      canvasEditor.canvas.on('object:modified', refreshImageType);
+    });
+    onBeforeUnmount(() => {
+      canvasEditor.off('selectOne', refreshImageType);
+      canvasEditor.off('selectCancel', refreshImageType);
+      canvasEditor.canvas.off('object:modified', refreshImageType);
+    });
+
     // 属性面板开关
     const switchAttrBar = () => {
       attrBarShow.value = !attrBarShow.value;
@@ -118,6 +157,7 @@ export default {
       copyElementJson,
       flip,
       position,
+      imageType,
     };
   },
 };
@@ -191,13 +231,26 @@ export default {
           v-show="mixinState.mSelectOneType === 'textbox'"
         ></AttributeDisplayText>
         <!-- 网络图片地址回显与编辑 -->
-        <AttributeOnlineImg></AttributeOnlineImg>
-        <!-- 替换图片 -->
-        <ReplaceImg></ReplaceImg>
-        <!-- 裁剪 -->
-        <CropperImg></CropperImg>
-        <!-- 图片裁切 -->
-        <ClipImage></ClipImage>
+        <AttributeOnlineImg />
+        <!-- 图片操作分组：替换图片 / 裁剪 / 图片裁切 -->
+        <div
+          v-show="mixinState.mSelectOneType === 'image'"
+          class="attr-item-box"
+          style="padding-bottom: 6px"
+        >
+          <Divider plain orientation="left">
+            <h4>{{ $t('imageOps') }}</h4>
+          </Divider>
+          <div class="bg-item">
+            <!-- 在线图片（含网络图片、变量图片）不展示"替换图片" -->
+            <ReplaceImg v-show="imageType === 'normal'"></ReplaceImg>
+            <!-- online 网络图片 / variable 变量图片不展示"裁剪"：裁剪会把对象 src
+                 替换为 base64（getCropData 产物），网络图将丢失原 URL、CDN 分片缓存失效，
+                 且导出 JSON 被 base64 撑爆 -->
+            <CropperImg v-show="imageType === 'normal'"></CropperImg>
+            <ClipImage></ClipImage>
+          </div>
+        </div>
         <!-- 条形码属性 -->
         <AttributeBarcode></AttributeBarcode>
         <!-- 二维码 -->
@@ -262,7 +315,8 @@ export default {
     font-size: 18px;
   }
 
-  /deep/ .ivu-tooltip {
+  /deep/ .ivu-tooltip,
+  /deep/ .ivu-dropdown {
     flex: 1 1 0;
     min-width: 0;
   }
