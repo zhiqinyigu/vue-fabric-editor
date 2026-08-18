@@ -226,8 +226,52 @@ function useLayerTree(canvasEditor, fabric, renameState) {
   const getLiveChildren = (obj) =>
     obj && Array.isArray(obj._objects) ? obj._objects : obj.getObjects();
 
+  // 变量图片缩略图缓存：以变量名为 key，避免每次刷新重复生成
+  const variableThumbCache = new Map();
+  // 生成占位图样式缩略图（纯色底 + 边框 + 变量名），与画布占位图视觉一致
+  const renderVariableThumb = (label) => {
+    try {
+      if (!document || !document.createElement) return '';
+      const size = 60;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '';
+      // 纯色底
+      ctx.fillStyle = '#F1F3F5';
+      ctx.fillRect(0, 0, size, size);
+      if (fabric.VariableImageOverlay && fabric.VariableImageOverlay.paint) {
+        // 复用叠加层绘制：边框 + 变量名（字号按 85% 宽度动态计算），保证与画布一致
+        ctx.save();
+        ctx.translate(size / 2, size / 2);
+        fabric.VariableImageOverlay.paint(ctx, size, size, label, 1);
+        ctx.restore();
+      } else {
+        ctx.strokeStyle = '#D5DBE0';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, size - 2, size - 2);
+      }
+      return canvas.toDataURL('image/png');
+    } catch (e) {
+      return '';
+    }
+  };
+  const getVariableThumb = (obj) => {
+    const label = obj.variableLabel || 'variable';
+    if (variableThumbCache.has(label)) return variableThumbCache.get(label);
+    const url = renderVariableThumb(label);
+    if (url) variableThumbCache.set(label, url);
+    return url;
+  };
+
   const getImgThumb = (obj) => {
     try {
+      // 变量图片：getSrc 返回变量 URL（如 {{user.id}}）无法加载，
+      // 缩略图改用占位图样式（纯色底 + 边框 + 变量名）
+      if (obj.isVariableImage === true) {
+        return getVariableThumb(obj);
+      }
       return obj.getSrc && obj.getSrc();
     } catch (e) {
       return '';

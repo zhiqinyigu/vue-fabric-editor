@@ -7,6 +7,7 @@
  */
 import { v4 as uuid } from 'uuid';
 import { fabric } from 'fabric';
+import VariableImage from '../objects/VariableImage';
 import {
   DEFAULT_DELIMITER,
   containsVariable,
@@ -28,6 +29,12 @@ class VariablePlugin {
     this.previewing = false;
     // 预览期快照：{ obj, field, oldValue }[]，用于退出时恢复
     this._snapshot = [];
+    // 资源替换令牌：图片/条码的展示资源替换是【异步加载】的，
+    // 每次应用快照（进入预览 / 退出预览 / 预览期刷新测试数据）都会递增该令牌，
+    // 异步回调执行时若令牌已变化即视为"过期结果"并丢弃。
+    // 典型场景：进入预览后测试图尚未加载完就退出预览，若在飞回调不做校验，
+    // 加载完成时会把测试图 element 写回已恢复编辑态的对象，占位图被测试图覆盖。
+    this._previewToken = 0;
     // 预览期对象交互锁定快照：{ obj, selectable, evented, hasControls, editable, lock* }
     this._lockSnapshot = [];
     // 预览期画布级交互快照：{ selection, skipTargetFind, defaultCursor }
@@ -113,57 +120,198 @@ class VariablePlugin {
   }
 
   /* ---------- 图片变量占位图 ---------- */
-  // URL 含变量时创建占位 image：真实 src 保留变量 URL，画布上显示占位图
+  // URL 含变量时创建占位 image：真实 src 保留变量 URL，画布上显示 VariableImage（纯色底 + 矢量叠加层）
   createVariableImage(src) {
     return new Promise((resolve, reject) => {
       const placeholder = this._makePlaceholder(src);
-      fabric.Image.fromURL(
+      fabric.util.loadImage(
         placeholder,
         (imgEl, isError) => {
           if (isError || !imgEl) {
             reject(new Error('图片变量占位图生成失败'));
             return;
           }
+          const instance = new VariableImage(imgEl, {
+            src,
+            isVariableImage: true,
+            id: uuid(),
+            variableLabel: this._extractVariableLabel(src),
+            showPlaceholderText: true,
+          });
           // 保留真实变量 URL 到 src（存储态），占位图仅用于编辑期展示
-          imgEl.set('src', src);
-          imgEl.set('isVariableImage', true);
-          imgEl.set('id', uuid());
-          this._patchGetSrc(imgEl);
-          resolve(imgEl);
+          this._patchGetSrc(instance);
+          resolve(instance);
+        },
+        this,
+        'anonymous'
+      );
+    });
+  }
+  // 从变量 URL 提取叠加层显示的变量名（如 "user.id"），多个变量用 ", " 连接
+  _extractVariableLabel(src) {
+    const vars = extractVariablesFromString(src, this.delimiter);
+    return vars.join(', ') || 'variable';
+  }
+  // 就地更新变量图片的 src（属性面板"网络图片地址"编辑入口）：
+  // - 新地址仍含变量：重建占位图展示，保持当前版位（left/top/scale/宽高）不变
+  // - 新地址为普通 URL：加载真实图并按版位比例缩放，清除变量标记
+  updateVariableImage(img, src) {
+    if (!img || img.type !== 'image') {
+      return Promise.reject(new Error('非图片对象，无法更新变量图片'));
+    }
+    const next = typeof src === 'string' ? src : '';
+    const isVar = containsVariable(next, this.delimiter);
+    // 同步更新存储态 src，并保证序列化输出变量 URL（而非占位图 dataURL）
+    img.set('src', next);
+    img.set('isVariableImage', isVar);
+    this._patchGetSrc(img);
+    if (isVar) {
+      // 普通图升级为变量图片：挂载矢量叠加层（type 保持 image，就地升级不换对象）
+      if (!(img instanceof VariableImage)) {
+        this._attachVariableOverlay(img);
+      }
+      img.set('variableLabel', this._extractVariableLabel(next));
+      img.set('showPlaceholderText', true);
+      const placeholder = this._makePlaceholder(next);
+      return new Promise((resolve, reject) => {
+        fabric.util.loadImage(
+          placeholder,
+          (imgEl, isError) => {
+            if (isError || !imgEl) {
+              reject(new Error('图片变量占位图生成失败'));
+              return;
+            }
+            const t = {
+              left: img.left,
+              top: img.top,
+              scaleX: img.scaleX,
+              scaleY: img.scaleY,
+              width: img.width,
+              height: img.height,
+            };
+            img.setElement(imgEl);
+            // 同上：setElement 不清对象缓存，强制刷新避免画面停留在旧图缓存
+            img.dirty = true;
+            img.set(t);
+            img.setCoords();
+            img.initDimensions && img.initDimensions();
+            this.canvas.requestRenderAll();
+            // 流式尺寸联动：占位图重建后尺寸可能变化
+            this.editor.emit('variable:previewRefresh');
+            resolve(img);
+          },
+          this,
+          'anonymous'
+        );
+      });
+    }
+    // 普通 URL：以 anonymous 加载真实图，按版位比例缩放（与属性面板 setSrc 逻辑一致）
+    // 变量图改回普通图：关闭占位叠加层，仅显示真实图片
+    if (img instanceof VariableImage || img._variableOverlayAttached) {
+      img.set('showPlaceholderText', false);
+    }
+    return new Promise((resolve, reject) => {
+      const width = img.get('width');
+      const height = img.get('height');
+      const scaleX = img.get('scaleX');
+      const scaleY = img.get('scaleY');
+      img.setSrc(
+        src,
+        (newImg, isError) => {
+          if (isError || !newImg) {
+            reject(new Error('图片加载失败'));
+            return;
+          }
+          newImg.set('scaleX', (width * scaleX) / newImg.width);
+          newImg.set('scaleY', (height * scaleY) / newImg.height);
+          newImg.setCoords();
+          newImg.initDimensions && newImg.initDimensions();
+          this.canvas.requestRenderAll();
+          // 流式尺寸联动：真实图加载后尺寸可能变化
+          this.editor.emit('variable:previewRefresh');
+          resolve(newImg);
         },
         { crossOrigin: 'anonymous' }
       );
     });
   }
-  // 生成"动态变量占位图"：灰底 + 图片图标 + 变量名
-  _makePlaceholder(src) {
-    const vars = extractVariablesFromString(src, this.delimiter);
-    const label = vars.join(', ') || 'variable';
+  // 普通 fabric.Image 就地升级为"变量图片渲染"：挂载叠加层 _render，type 保持 image，
+  // 避免重建对象丢失画布引用与选中态（属性面板"网络图片地址"编辑后原地生效）
+  _attachVariableOverlay(img) {
+    if (img._variableOverlayAttached) return;
+    img._variableOverlayAttached = true;
+    img.set('showPlaceholderText', true);
+    img._render = function (ctx) {
+      fabric.Image.prototype._render.call(this, ctx);
+      fabric.VariableImageOverlay.draw(ctx, this);
+    };
+  }
+  // 生成"动态变量占位图"：纯色底（240x160）
+  // 边框与变量名由 VariableImage 矢量叠加层实时绘制（字号按占位符 85% 宽度动态计算），
+  // 反缩放补偿保证任意缩放文字不变形、不模糊（位图内嵌文字会随位图拉伸变形）
+  _makePlaceholder() {
     const width = 240;
     const height = 160;
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
-    // 灰底
     ctx.fillStyle = '#F1F3F5';
     ctx.fillRect(0, 0, width, height);
-    // 边框
-    ctx.strokeStyle = '#D5DBE0';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(2, 2, width - 4, height - 4);
-    // 图片图标
-    ctx.fillStyle = '#AEB6BF';
-    ctx.fillRect(width / 2 - 18, height / 2 - 26, 36, 28);
-    ctx.strokeStyle = '#AEB6BF';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(width / 2 - 10, height / 2 + 2, 20, 14);
-    // 变量名
-    ctx.fillStyle = '#9099A3';
-    ctx.font = '13px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(label, width / 2, height - 22);
     return canvas.toDataURL('image/png');
+  }
+  // 预热并缓存占位图 element（HTMLImageElement）：
+  // 进入预览时触发异步加载，退出预览时用缓存的 element 同步替换展示资源，
+  // 消除"占位图异步加载期间画布先渲染出测试图"的退出闪变。
+  _warmPlaceholderCache() {
+    if (this._placeholderEl || this._placeholderElLoading) return;
+    this._placeholderElLoading = true;
+    try {
+      fabric.util.loadImage(
+        this._makePlaceholder(),
+        (imgEl, isError) => {
+          this._placeholderEl = !isError && imgEl ? imgEl : null;
+          this._placeholderElLoading = false;
+        },
+        this,
+        'anonymous'
+      );
+    } catch (e) {
+      // 缓存预热是纯优化，加载失败（如无 DOM 图像解码环境）必须静默降级：
+      // _placeholderEl 保持 null，退出预览走原异步加载路径，预览功能不受影响
+      this._placeholderElLoading = false;
+    }
+  }
+  // 退出预览同步恢复占位图：与 _reloadImageSrc 异步回调中 isVariableSrc 分支的
+  // 逻辑完全一致（setElement + 还原 shadow/clipPath 补偿 + 恢复原始 transform），
+  // 但同步执行，保证 exitPreview 随后的 requestRenderAll 渲染的就是占位图画面，
+  // 不出现"测试图 × 占位图 transform"的中间帧。
+  _restorePlaceholderSync(img, placeholderEl, src, oldTransform) {
+    // 优先使用快照中的原始 transform；缺失时退化用当前值（占位图场景）
+    const t = oldTransform || {
+      left: img.left,
+      top: img.top,
+      scaleX: img.scaleX,
+      scaleY: img.scaleY,
+      width: img.width,
+      height: img.height,
+    };
+    img.setElement(placeholderEl);
+    // setElement 只移除 WebGL 纹理缓存，不会清空对象 _cacheCanvas；
+    // 强制 dirty，让下一次渲染用新 element + 当前 clipPath 重建缓存。
+    img.dirty = true;
+    // 退出预览（恢复占位图）：打开占位叠加层，并重算变量名
+    img.set('showPlaceholderText', true);
+    img.set('variableLabel', this._extractVariableLabel(src));
+    // 还原预览期阴影/clipPath 补偿，避免污染模板配置
+    this._restorePreviewShadow(img);
+    this._restorePreviewClipPath(img);
+    // 占位图：按原尺寸展示（渲染由 exitPreview 统一 requestRenderAll）
+    img.set(t);
+    img.setCoords && img.setCoords();
+    img.initDimensions && img.initDimensions();
+    // 流式尺寸联动：占位图恢复为原始尺寸后，画布可能变化
+    this.editor.emit('variable:previewRefresh');
   }
   // 序列化（toObject/toJSON）时，变量图片应输出存储的变量 URL，而非占位图 dataURL
   // fabric.Image.getSrc 默认取 DOM 元素 src（即占位图 base64），这里按 isVariableImage 兜底返回 this.src
@@ -201,6 +349,9 @@ class VariablePlugin {
           if (!isError && instance) {
             instance.set('src', variableSrc);
             instance.set('isVariableImage', true);
+            instance.set('variableLabel', self._extractVariableLabel(variableSrc));
+            // 恢复变量图片的矢量叠加层渲染（type 保持 image）
+            self._attachVariableOverlay(instance);
             self._patchGetSrc(instance);
           }
           callback && callback(instance, isError);
@@ -267,11 +418,21 @@ class VariablePlugin {
           if (isError || !imgEl) return;
           const { left, top, scaleX, scaleY, width, height } = obj;
           obj.setElement(imgEl);
+          // 同上：setElement 不清对象缓存，强制刷新避免画面停留在旧图缓存
+          obj.dirty = true;
           obj.set('src', src);
           obj.set('isVariableImage', true);
+          obj.set('variableLabel', this._extractVariableLabel(src));
+          obj.set('showPlaceholderText', true);
+          // 旧文件未挂载叠加层时补挂（type 保持 image）
+          if (!(obj instanceof VariableImage) && !obj._variableOverlayAttached) {
+            this._attachVariableOverlay(obj);
+          }
           obj.set({ left, top, scaleX, scaleY, width, height });
           obj.setCoords();
           this.canvas.requestRenderAll();
+          // 流式尺寸联动：占位图恢复为原始尺寸后，画布可能变化
+          this.editor.emit('variable:previewRefresh');
         },
         this,
         'anonymous'
@@ -282,6 +443,10 @@ class VariablePlugin {
   /* ---------- 非破坏性预览 ---------- */
   enterPreview() {
     if (this.previewing) return;
+    // 预热占位图 element 缓存：进入预览期间异步完成加载，
+    // 保证退出预览时能【同步】恢复占位图，避免占位图异步加载期间
+    // 画布渲染出"测试图 × 占位图 transform"的中间帧（退出瞬间闪测试图）
+    this._warmPlaceholderCache();
     this._snapshot = [];
     this._collectSnapshot(this.canvas.getObjects());
     if (this._snapshot.length === 0) {
@@ -294,6 +459,8 @@ class VariablePlugin {
     this.previewing = true;
     this.editor.emit('variable:previewChange', true);
     this.canvas.requestRenderAll();
+    // 流式尺寸联动：预览后内容尺寸可能变化（文本渲染更长等）
+    this.editor.emit('variable:previewRefresh');
   }
   exitPreview() {
     if (!this.previewing) return;
@@ -303,6 +470,8 @@ class VariablePlugin {
     this._snapshot = [];
     this.editor.emit('variable:previewChange', false);
     this.canvas.requestRenderAll();
+    // 流式尺寸联动：退出预览后内容尺寸可能变化
+    this.editor.emit('variable:previewExit');
   }
   // 锁定/解锁画布所有对象（进入预览锁定，退出预览恢复原交互状态）
   _lockObjects(lock) {
@@ -374,6 +543,8 @@ class VariablePlugin {
     if (!this.previewing) return;
     this._applySnapshot(true);
     this.canvas.requestRenderAll();
+    // 流式尺寸联动：测试数据变化后内容尺寸可能变化（文本变长/图片变大）
+    this.editor.emit('variable:previewRefresh');
   }
   _collectSnapshot(objects) {
     objects.forEach((obj) => {
@@ -404,6 +575,10 @@ class VariablePlugin {
     });
   }
   _applySnapshot(toPreview) {
+    // 本次应用快照的令牌：其后发起的所有异步加载都带上它，
+    // 期间若发生新的应用快照（退出预览、改测试数据重新预览等），
+    // 旧令牌的加载回调一律丢弃，避免过期结果覆盖当前状态
+    const token = ++this._previewToken;
     this._snapshot.forEach(({ obj, field, oldValue, oldTransform }) => {
       if (field === 'text') {
         const next = toPreview ? render(oldValue, this.testData, this.delimiter) : oldValue;
@@ -419,7 +594,7 @@ class VariablePlugin {
         if (!toPreview && oldTransform) {
           obj.set(oldTransform);
         }
-        this._reloadImageSrc(obj, next, oldTransform);
+        this._reloadImageSrc(obj, next, oldTransform, token);
       } else if (field === 'extension.data' || field === 'extension.value') {
         // 二维码/条形码：内容在 extension 子字段，预览期渲染内容并按原版位重绘图像；
         // 退出时恢复原始内容与 transform，异步仅用于刷新展示
@@ -429,14 +604,22 @@ class VariablePlugin {
         if (!toPreview && oldTransform) {
           obj.set(oldTransform);
         }
-        this._reloadExtensionImage(obj, field, oldTransform, toPreview);
+        this._reloadExtensionImage(obj, field, oldTransform, toPreview, token);
       }
     });
   }
-  _reloadImageSrc(img, src, oldTransform) {
+  _reloadImageSrc(img, src, oldTransform, token) {
     // 仅替换展示资源，不改变已设置的 src 属性（src 属性已由 _applySnapshot 同步设置）
     // 变量 URL 无法直接加载，回退为占位图展示（用于退出预览时恢复编辑态表现）
     const isVariableSrc = typeof src === 'string' && containsVariable(src, this.delimiter);
+    // 退出预览恢复占位图：若缓存 element 已就绪则【同步】替换展示资源并还原
+    // shadow/clipPath 补偿。否则退出预览后、占位图异步加载完成前的第一次渲染
+    // 会把"测试图 element × 占位图 transform × 还原前 clip"画上屏，
+    // 表现为退出预览瞬间闪一下测试数据图片（随后才被占位图覆盖）。
+    if (isVariableSrc && this._placeholderEl) {
+      this._restorePlaceholderSync(img, this._placeholderEl, src, oldTransform);
+      return;
+    }
     const loadSrc = isVariableSrc ? this._makePlaceholder(src) : src;
     // 注意：setElement 需要原生 HTMLImageElement，不能用 fabric.Image.fromURL
     // （fromURL 的回调返回的是 fabric.Image 实例，传入 setElement 会导致
@@ -445,6 +628,9 @@ class VariablePlugin {
     fabric.util.loadImage(
       loadSrc,
       (imgEl, isError) => {
+        // 过期结果丢弃：图片异步加载期间可能已退出预览（或改测试数据重新预览），
+        // 此时该回调对应的资源已过期，写回会把编辑态占位图替换成测试数据图
+        if (token !== undefined && token !== this._previewToken) return;
         if (!isError && imgEl) {
           // 优先使用快照中的原始 transform；缺失时退化用当前值（占位图场景）
           const t = oldTransform || {
@@ -456,6 +642,21 @@ class VariablePlugin {
             height: img.height,
           };
           img.setElement(imgEl);
+          // setElement 只移除 WebGL 纹理缓存，不会清空对象 _cacheCanvas；
+          // 若此处未置 dirty，画布渲染会直接绘制旧缓存（预览态测试图画面、
+          // 裁切位置/大小停留在预览状态），导致退出预览后画面异常。
+          // 强制 dirty，让下一次渲染用新 element + 当前 clipPath 重建缓存。
+          img.dirty = true;
+          // 预览真实图时关闭占位叠加层；退出预览恢复占位图时打开，并重算变量名
+          img.set('showPlaceholderText', isVariableSrc);
+          if (isVariableSrc) {
+            img.set('variableLabel', this._extractVariableLabel(src));
+          }
+          if (isVariableSrc) {
+            // 退出预览（恢复占位图）：还原预览期阴影/clipPath 补偿，避免污染模板配置
+            this._restorePreviewShadow(img);
+            this._restorePreviewClipPath(img);
+          }
           if (isVariableSrc || !oldTransform) {
             // 占位图 / 无原始 transform 记录：按原尺寸展示
             img.set(t);
@@ -469,12 +670,24 @@ class VariablePlugin {
             const displayedW = t.width * t.scaleX;
             const displayedH = t.height * t.scaleY;
             if (naturalW > 0 && naturalH > 0 && displayedW > 0 && displayedH > 0) {
+              const prevScaleX = t.scaleX || 1;
+              const prevScaleY = t.scaleY || 1;
+              const nextScaleX = displayedW / naturalW;
+              const nextScaleY = displayedH / naturalH;
               img.set({
-                scaleX: displayedW / naturalW,
-                scaleY: displayedH / naturalH,
+                scaleX: nextScaleX,
+                scaleY: nextScaleY,
                 left: t.left,
                 top: t.top,
               });
+              // 阴影补偿：fabric 渲染阴影时 blur/offset 乘对象 scale（fabric _setShadow），
+              // 真实图为适配版位把 scale 缩小（如 0.31/0.12），阴影随之成倍缩小。
+              // 按"预览阴影 = 占位图编辑态阴影"反缩放补偿，退出预览时 _restorePreviewShadow 还原。
+              this._compensatePreviewShadow(img, prevScaleX, prevScaleY, nextScaleX, nextScaleY);
+              // clipPath（形状裁切）补偿：裁切框以"对象局部坐标 + 1/scale 补偿"定义，
+              // 对象 scale 变化后需按 oldScale/newScale 换算 left/top/scaleX/scaleY，
+              // 使裁切框屏幕位置/大小与占位图一致，退出预览时 _restorePreviewClipPath 还原。
+              this._compensatePreviewClipPath(img, prevScaleX, prevScaleY, nextScaleX, nextScaleY);
             } else {
               img.set(t);
             }
@@ -482,6 +695,8 @@ class VariablePlugin {
           img.setCoords();
           img.initDimensions && img.initDimensions();
           this.canvas.requestRenderAll();
+          // 流式尺寸联动：预览/恢复加载完成后尺寸可能变化
+          this.editor.emit('variable:previewRefresh');
         }
       },
       this,
@@ -492,7 +707,7 @@ class VariablePlugin {
   // 复用 QrCodePlugin/BarCodePlugin 生成 base64，再 setSrc 替换展示资源（不换对象）。
   // - 预览：新生成的条码按原版位显示尺寸等比缩放（left/top 不动，width/height 取新图自然尺寸）
   // - 退出：恢复原始 transform（原内容生成的图像自然尺寸与快照一致，直接还原版位）
-  _reloadExtensionImage(obj, field, oldTransform, toPreview) {
+  _reloadExtensionImage(obj, field, oldTransform, toPreview, token) {
     const isQr = obj.get('extensionType') === 'qrcode';
     const pluginName = isQr ? 'QrCodePlugin' : 'BarCodePlugin';
     const plugin = this.editor.getPlugin && this.editor.getPlugin(pluginName);
@@ -511,6 +726,8 @@ class VariablePlugin {
     }
     Promise.resolve(raw)
       .then((base64) => {
+        // 过期结果丢弃：生成/加载期间若已退出预览或重新预览，当前结果不再适用
+        if (token !== undefined && token !== this._previewToken) return;
         if (!base64 || typeof base64 !== 'string') {
           this.canvas.requestRenderAll();
           return;
@@ -518,6 +735,7 @@ class VariablePlugin {
         obj.setSrc(
           base64,
           (newImg, isError) => {
+            if (token !== undefined && token !== this._previewToken) return;
             if (isError || !newImg) return;
             const t = oldTransform || {
               left: obj.left,
@@ -561,6 +779,83 @@ class VariablePlugin {
       });
   }
 
+  // 预览真实图时的阴影补偿：fabric _setShadow 按对象 scale 缩放阴影
+  // （shadowBlur ∝ (scaleX+scaleY)/4，offset ∝ scale），真实图 scale 变小导致阴影缩小。
+  // 记录原始 shadow 值（仅首次），并基于原始值乘以补偿因子，使"预览阴影 = 占位图编辑态阴影"。
+  _compensatePreviewShadow(img, prevScaleX, prevScaleY, nextScaleX, nextScaleY) {
+    const shadow = img.shadow;
+    if (!shadow) return;
+    if (!img._previewShadow) {
+      img._previewShadow = {
+        blur: shadow.blur,
+        offsetX: shadow.offsetX,
+        offsetY: shadow.offsetY,
+      };
+    }
+    const base = img._previewShadow;
+    shadow.blur = base.blur * ((prevScaleX + prevScaleY) / (nextScaleX + nextScaleY) || 1);
+    shadow.offsetX = base.offsetX * (prevScaleX / nextScaleX || 1);
+    shadow.offsetY = base.offsetY * (prevScaleY / nextScaleY || 1);
+  }
+  // 退出预览：还原阴影补偿前的原始值（_previewShadow 为临时挂载属性，不参与序列化）
+  _restorePreviewShadow(img) {
+    const shadow = img.shadow;
+    const base = img._previewShadow;
+    if (!shadow || !base) return;
+    shadow.blur = base.blur;
+    shadow.offsetX = base.offsetX;
+    shadow.offsetY = base.offsetY;
+    img._previewShadow = null;
+    // 直接改 shadow 属性不会触发对象重绘标记，强制刷新缓存
+    img.dirty = true;
+  }
+  // 预览真实图时的 clipPath（形状裁切）补偿。
+  // SimpleClipImagePlugin.correctPosition 把裁切框定义为"对象局部坐标 + 1/scale 补偿"
+  // （absolutePositioned:false，left/top 与 scale 均按对象 scale 计算），渲染时裁切框
+  // 屏幕位置/大小 = clip 局部值 × clip.scale × 对象 scale。对象 scale 从占位图值
+  // （prevScale）变为真实图适配值（nextScale）后，clip 的局部值与补偿若不联动，
+  // 裁切框会偏移、缩小、非等比时变形。
+  // 修复：left/top/scaleX/scaleY 统一按 prevScale/nextScale 反缩放换算，保证
+  // "裁切框屏幕位置与大小 = 占位图编辑态"。记录原始值（仅首次），退出预览时还原。
+  _compensatePreviewClipPath(img, prevScaleX, prevScaleY, nextScaleX, nextScaleY) {
+    const clip = img.clipPath;
+    if (!clip) return;
+    if (!img._previewClip) {
+      img._previewClip = {
+        left: clip.left,
+        top: clip.top,
+        scaleX: clip.scaleX,
+        scaleY: clip.scaleY,
+      };
+    }
+    const base = img._previewClip;
+    const kx = prevScaleX / nextScaleX || 1;
+    const ky = prevScaleY / nextScaleY || 1;
+    clip.left = base.left * kx;
+    clip.top = base.top * ky;
+    clip.scaleX = base.scaleX * kx;
+    clip.scaleY = base.scaleY * ky;
+    clip.setCoords && clip.setCoords();
+    clip.dirty = true;
+    // 直接改 clip 属性不会触发对象重绘标记，强制刷新对象缓存
+    img.dirty = true;
+  }
+  // 退出预览：还原 clipPath 换算前的原始值（_previewClip 为临时挂载属性，不参与序列化）
+  _restorePreviewClipPath(img) {
+    const clip = img.clipPath;
+    const base = img._previewClip;
+    if (!clip || !base) return;
+    clip.left = base.left;
+    clip.top = base.top;
+    clip.scaleX = base.scaleX;
+    clip.scaleY = base.scaleY;
+    clip.setCoords && clip.setCoords();
+    clip.dirty = true;
+    img._previewClip = null;
+    // 直接改 clip 属性不会触发对象重绘标记，强制刷新对象缓存
+    img.dirty = true;
+  }
+
   /* ---------- 保存钩子：强制退出预览，保证模板 JSON 用原始占位符 ---------- */
   hookSaveBefore() {
     if (this.previewing) this.exitPreview();
@@ -598,6 +893,7 @@ VariablePlugin.apis = [
   'getVariables',
   'containsVariable',
   'createVariableImage',
+  'updateVariableImage',
   'enterPreview',
   'exitPreview',
   'isPreviewing',

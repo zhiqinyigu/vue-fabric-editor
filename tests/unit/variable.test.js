@@ -141,6 +141,63 @@ describe('变量图片序列化：保存变量 URL 而非 base64', () => {
   });
 });
 
+describe('变量图片地址编辑（updateVariableImage）：属性面板"网络图片地址"入口', () => {
+  let loadImageSpy;
+  let plugin;
+
+  beforeEach(() => {
+    loadImageSpy = mockLoadImage();
+    plugin = createPlugin();
+  });
+  afterEach(() => {
+    loadImageSpy.mockRestore();
+  });
+
+  it('变量 URL -> 变量 URL：更新 src 并重建占位图，保持版位与变量标记', (done) => {
+    plugin.createVariableImage(VAR_URL).then((img) => {
+      img.set({ left: 10, top: 20 });
+      const NEW = 'https://cdn.example.com/banner/{{banner.url}}';
+      plugin.updateVariableImage(img, NEW).then((out) => {
+        expect(out).toBe(img);
+        expect(img.get('src')).toBe(NEW);
+        expect(img.get('isVariableImage')).toBe(true);
+        // 序列化仍输出变量 URL（而非占位图 dataURL）
+        expect(img.toObject().src).toBe(NEW);
+        expect(img.toObject().src).not.toMatch(/^data:/);
+        // 版位不变：占位图按原尺寸展示
+        expect(img.left).toBe(10);
+        expect(img.top).toBe(20);
+        expect(img.width).toBe(240);
+        expect(img.height).toBe(160);
+        done();
+      });
+    });
+  });
+
+  it('变量图片改为普通 URL：清除变量标记并按版位比例加载真实图', (done) => {
+    plugin.createVariableImage(VAR_URL).then((img) => {
+      img.set({ left: 10, top: 20, scaleX: 1, scaleY: 1 });
+      const REAL = 'https://cdn.example.com/real.png';
+      plugin.updateVariableImage(img, REAL).then((out) => {
+        expect(out).toBeTruthy();
+        expect(out.get('src')).toBe(REAL);
+        expect(out.get('isVariableImage')).not.toBe(true);
+        expect(out.toObject().src).toBe(REAL);
+        expect(out.toObject().src).not.toMatch(/^data:/);
+        // 真实图（240x160）按原版位比例缩放后显示尺寸不变
+        expect(out.getScaledWidth()).toBeCloseTo(240);
+        expect(out.getScaledHeight()).toBeCloseTo(160);
+        done();
+      });
+    });
+  });
+
+  it('非图片对象调用 updateVariableImage 直接拒绝', async () => {
+    const textbox = new fabric.Textbox('hello', {});
+    await expect(plugin.updateVariableImage(textbox, VAR_URL)).rejects.toThrow('非图片对象');
+  });
+});
+
 describe('变量图片预览：真实图缩放到占位框显示尺寸（改 scale）', () => {
   let loadImageSpy;
   let plugin;
@@ -246,6 +303,368 @@ describe('变量图片预览：真实图缩放到占位框显示尺寸（改 sca
       expect(img.scaleY).toBe(1);
       expect(img.left).toBe(original.left);
       expect(img.top).toBe(original.top);
+      done();
+    });
+  });
+
+  it('预览真实图时阴影反缩放补偿（与占位图阴影一致），退出预览还原', (done) => {
+    mockPortraitImage();
+    plugin.createVariableImage(VAR_URL).then((img) => {
+      const original = {
+        left: img.left,
+        top: img.top,
+        scaleX: img.scaleX,
+        scaleY: img.scaleY,
+        width: img.width,
+        height: img.height,
+      };
+      // 占位图（scale=1）设置阴影：blur=20, offset=(10,10)
+      img.set('shadow', new fabric.Shadow({ color: 'rgba(0,0,0,0.5)', blur: 20, offsetX: 10, offsetY: 10 }));
+      const shadow = img.shadow;
+      // fabric _setShadow：shadowBlur ∝ (scaleX+scaleY)/4、offset ∝ scale。
+      // 真实图 scale 缩至 (240/768, 160/1366)，补偿因子使渲染后阴影 = 占位图编辑态阴影。
+      const blurFactor = (1 + 1) / (240 / 768 + 160 / 1366);
+      const expectedBlur = 20 * blurFactor;
+      const expectedOffsetX = 10 / (240 / 768);
+      const expectedOffsetY = 10 / (160 / 1366);
+
+      // 预览真实图：shadow 被反缩放补偿（放大）
+      plugin._reloadImageSrc(img, 'https://cdn.example.com/real.png', original);
+      expect(img.scaleX).toBeCloseTo(240 / 768);
+      expect(img.scaleY).toBeCloseTo(160 / 1366);
+      expect(shadow.blur).toBeCloseTo(expectedBlur, 5);
+      expect(shadow.offsetX).toBeCloseTo(expectedOffsetX, 5);
+      expect(shadow.offsetY).toBeCloseTo(expectedOffsetY, 5);
+
+      // 再次预览刷新：基于原始值重算，不累积放大
+      plugin._reloadImageSrc(img, 'https://cdn.example.com/real2.png', original);
+      expect(shadow.blur).toBeCloseTo(expectedBlur, 5);
+      expect(shadow.offsetX).toBeCloseTo(expectedOffsetX, 5);
+      expect(shadow.offsetY).toBeCloseTo(expectedOffsetY, 5);
+
+      // 退出预览（恢复占位图）：还原原始 shadow 配置，不污染模板
+      plugin._reloadImageSrc(img, VAR_URL, original);
+      expect(shadow.blur).toBe(20);
+      expect(shadow.offsetX).toBe(10);
+      expect(shadow.offsetY).toBe(10);
+      expect(img._previewShadow).toBeNull();
+      done();
+    });
+  });
+
+  it('预览真实图时 clipPath 裁切框按新 scale 换算（位置/大小与占位图一致），退出预览还原', (done) => {
+    mockPortraitImage();
+    plugin.createVariableImage(VAR_URL).then((img) => {
+      const original = {
+        left: img.left,
+        top: img.top,
+        scaleX: img.scaleX,
+        scaleY: img.scaleY,
+        width: img.width,
+        height: img.height,
+      };
+      // 模拟 SimpleClipImagePlugin.correctPosition 输出：占位图 scale=1 时
+      // clip 以"对象局部坐标 + 1/scale 补偿"定义（absolutePositioned:false）
+      const clip = new fabric.Rect({
+        absolutePositioned: false,
+        width: 120,
+        height: 80,
+        left: 60,
+        top: 40,
+        scaleX: 1,
+        scaleY: 1,
+        originX: 'center',
+        originY: 'center',
+      });
+      img.set('clipPath', clip);
+      // 组合矩阵 = 对象变换 × clip 变换（fabric 渲染 clip 的坐标系）
+      const comboOf = () =>
+        fabric.util.multiplyTransformMatrices(img.calcTransformMatrix(), clip.calcTransformMatrix());
+      // 占位图基线（scale=1）
+      const baseCombo = comboOf();
+      const baseObjCx = img.left + img.width / 2;
+      const baseObjCy = img.top + img.height / 2;
+      const baseOffsetX = baseCombo[4] - baseObjCx;
+      const baseOffsetY = baseCombo[5] - baseObjCy;
+      const baseW = clip.width * baseCombo[0];
+      const baseH = clip.height * baseCombo[3];
+
+      // 预览真实图：对象 scale 从 1 -> (240/768, 160/1366)，clip 反缩放换算
+      plugin._reloadImageSrc(img, 'https://cdn.example.com/real.png', original);
+      const kx = 1 / (240 / 768);
+      const ky = 1 / (160 / 1366);
+      expect(img.scaleX).toBeCloseTo(240 / 768);
+      expect(img.scaleY).toBeCloseTo(160 / 1366);
+      expect(clip.left).toBeCloseTo(60 * kx);
+      expect(clip.top).toBeCloseTo(40 * ky);
+      expect(clip.scaleX).toBeCloseTo(kx);
+      expect(clip.scaleY).toBeCloseTo(ky);
+      // 组合矩阵验证：裁切框中心相对对象中心偏移、显示尺寸与占位图一致
+      const curCombo = comboOf();
+      const curObjCx = img.left + (img.width * img.scaleX) / 2;
+      const curObjCy = img.top + (img.height * img.scaleY) / 2;
+      expect(curCombo[4] - curObjCx).toBeCloseTo(baseOffsetX);
+      expect(curCombo[5] - curObjCy).toBeCloseTo(baseOffsetY);
+      expect(clip.width * curCombo[0]).toBeCloseTo(baseW);
+      expect(clip.height * curCombo[3]).toBeCloseTo(baseH);
+
+      // 再次预览刷新：基于原始值重算，不累积
+      plugin._reloadImageSrc(img, 'https://cdn.example.com/real2.png', original);
+      expect(clip.left).toBeCloseTo(60 * kx);
+      expect(clip.top).toBeCloseTo(40 * ky);
+      expect(clip.scaleX).toBeCloseTo(kx);
+      expect(clip.scaleY).toBeCloseTo(ky);
+
+      // 模拟真实渲染时序：预览画面已渲染，dirty 被消费、对象缓存为"预览态画面"
+      // （带 clipPath 的对象 needsItsOwnCache 恒为 true，走自身 _cacheCanvas）
+      img.dirty = false;
+      img._cacheCanvas = { width: 10, height: 10 };
+      // 退出预览（恢复占位图）：还原 clipPath 原始配置，不污染模板
+      plugin._reloadImageSrc(img, VAR_URL, original);
+      expect(clip.left).toBe(60);
+      expect(clip.top).toBe(40);
+      expect(clip.scaleX).toBe(1);
+      expect(clip.scaleY).toBe(1);
+      expect(img._previewClip).toBeNull();
+      // 关键回归：setElement 不清对象 _cacheCanvas，若此处未强制 dirty，
+      // 画布会直接绘制预览期旧缓存（仍显示测试图、裁切错位）——必须为 true
+      expect(img.dirty).toBe(true);
+      done();
+    });
+  });
+
+  it('占位图 element 缓存就绪时退出预览同步恢复，不闪测试图（跳过异步加载）', (done) => {
+    plugin.createVariableImage(VAR_URL).then((img) => {
+      const original = {
+        left: img.left,
+        top: img.top,
+        scaleX: img.scaleX,
+        scaleY: img.scaleY,
+        width: img.width,
+        height: img.height,
+      };
+      // 预览：真实图替换占位图（mock loadImage 同步回调），按版位缩放
+      plugin._reloadImageSrc(img, 'https://cdn.example.com/real.png', original);
+      expect(img._element.src).toContain('real.png');
+      expect(img.getScaledWidth()).toBeCloseTo(240);
+      expect(img.getScaledHeight()).toBeCloseTo(160);
+
+      // 模拟真实渲染时序：预览画面已渲染，dirty 被消费、对象缓存为"预览态画面"
+      img.dirty = false;
+      img._cacheCanvas = { width: 10, height: 10 };
+      // 占位图 element 缓存已就绪（enterPreview 预热完成）
+      const cachedEl = makeImageElement(plugin._makePlaceholder());
+      plugin._placeholderEl = cachedEl;
+      const loadCallsBefore = loadImageSpy.mock.calls.length;
+      const setElementSpy = jest.spyOn(img, 'setElement');
+
+      // 退出预览：走同步恢复分支，不再发起异步 loadImage
+      plugin._reloadImageSrc(img, VAR_URL, original);
+
+      // element 立刻换成缓存占位图（而非先渲染测试图再等异步替换）
+      expect(setElementSpy).toHaveBeenCalledWith(cachedEl);
+      expect(img._element).toBe(cachedEl);
+      // 未发起新的异步加载：退出瞬间不会出现"测试图 × 占位图 transform"中间帧
+      expect(loadImageSpy.mock.calls.length).toBe(loadCallsBefore);
+      // 关键回归：setElement 不清对象 _cacheCanvas，必须强制 dirty 重建缓存
+      expect(img.dirty).toBe(true);
+      // transform 恢复：不污染模板
+      expect(img.width).toBe(original.width);
+      expect(img.height).toBe(original.height);
+      expect(img.scaleX).toBe(1);
+      expect(img.scaleY).toBe(1);
+      expect(img.left).toBe(original.left);
+      expect(img.top).toBe(original.top);
+      // 占位叠加层重新打开、变量名重算
+      expect(img.get('showPlaceholderText')).toBe(true);
+      expect(img.get('variableLabel')).toBe('user.avatar');
+      done();
+    });
+  });
+
+  it('加载未完成时退出预览：在飞的预览图回调被丢弃，不覆盖编辑态占位图', (done) => {
+    // VAR_URL 以 {{user.avatar}} 结尾：测试数据填文件名，渲染后为完整真实图 URL
+    const REAL_IMG = 'https://cdn.example.com/avatar/real.png';
+    plugin.createVariableImage(VAR_URL).then((img) => {
+      const original = {
+        left: img.left,
+        top: img.top,
+        scaleX: img.scaleX,
+        scaleY: img.scaleY,
+        width: img.width,
+        height: img.height,
+      };
+      // 手动接管 loadImage：模拟真实浏览器"图片异步加载中"的状态
+      const pending = [];
+      loadImageSpy.mockImplementation((url, cb, thisArg) => {
+        pending.push(() => cb.call(thisArg, makeImageElement(url), false));
+      });
+      plugin.canvas.getObjects = () => [img];
+      plugin.canvas.discardActiveObject = () => {};
+      plugin.setTestData({ 'user.avatar': 'real.png' });
+
+      // 进入预览：预热占位图 + 加载预览真实图（均未回调）
+      plugin.enterPreview();
+      expect(pending.length).toBe(2);
+      expect(img.get('src')).toBe(REAL_IMG);
+
+      // 图片尚未加载完成就退出预览：src/transform 同步还原，占位图仍需异步加载
+      plugin.exitPreview();
+      expect(img.get('src')).toBe(VAR_URL);
+      expect(pending.length).toBe(3);
+
+      // 加载陆续完成：先占位图缓存预热（无令牌），再预览真实图（旧令牌 -> 过期）
+      pending[0]();
+      pending[1]();
+      // 关键回归：过期回调不得把测试图写回已退出预览的对象
+      expect(img._element.src).not.toContain('real.png');
+      expect(img._element.src).toMatch(/^data:/);
+      // 退出预览的还原结果保持：变量 URL + 原始 transform
+      expect(img.get('src')).toBe(VAR_URL);
+      expect(img.scaleX).toBe(original.scaleX);
+      expect(img.scaleY).toBe(original.scaleY);
+      expect(img.getScaledWidth()).toBeCloseTo(240);
+      expect(img.getScaledHeight()).toBeCloseTo(160);
+
+      // 退出预览时发起的占位图加载（当前令牌）正常生效
+      pending[2]();
+      expect(img._element.src).toMatch(/^data:/);
+      expect(img.get('showPlaceholderText')).toBe(true);
+      expect(img.get('variableLabel')).toBe('user.avatar');
+      done();
+    });
+  });
+});
+
+describe('VariableImage 矢量叠加层：type 保持 image，任意缩放文字不变形（反缩放补偿）', () => {
+  let loadImageSpy;
+  let plugin;
+
+  beforeEach(() => {
+    loadImageSpy = mockLoadImage();
+    plugin = createPlugin();
+  });
+  afterEach(() => {
+    loadImageSpy.mockRestore();
+  });
+
+  // mock 渲染 ctx：记录 scale/font/fillText 等调用，验证反缩放补偿
+  function makeMockCtx() {
+    return {
+      save: jest.fn(),
+      restore: jest.fn(),
+      scale: jest.fn(),
+      transform: jest.fn(),
+      translate: jest.fn(),
+      rotate: jest.fn(),
+      beginPath: jest.fn(),
+      closePath: jest.fn(),
+      clip: jest.fn(),
+      setTransform: jest.fn(),
+      setLineDash: jest.fn(),
+      drawImage: jest.fn(),
+      strokeRect: jest.fn(),
+      fillRect: jest.fn(),
+      fillText: jest.fn(),
+      font: '',
+      textAlign: '',
+      textBaseline: '',
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+      globalAlpha: 1,
+      globalCompositeOperation: 'source-over',
+    };
+  }
+
+  it('createVariableImage 返回 VariableImage 实例，type 保持 image', async () => {
+    const img = await plugin.createVariableImage(VAR_URL);
+    expect(img instanceof fabric.VariableImage).toBe(true);
+    expect(img.type).toBe('image');
+    expect(img.get('isVariableImage')).toBe(true);
+    expect(img.get('showPlaceholderText')).toBe(true);
+    expect(img.toObject().type).toBe('image');
+    // 序列化 src 仍为变量 URL
+    expect(img.toObject().src).toBe(VAR_URL);
+  });
+
+  it('等比缩放（2x）：反缩放 scale(1/2, 1/2)，字号按 85% 宽度动态计算，图标已移除', async () => {
+    const img = await plugin.createVariableImage(VAR_URL);
+    img.set({ scaleX: 2, scaleY: 2 });
+    const ctx = makeMockCtx();
+    img._render(ctx);
+    expect(ctx.scale).toHaveBeenCalledWith(1 / 2, 1 / 2);
+    // 动态字号：一行文字占显示宽度 85%。
+    // mock 无 measureText，按 ASCII 0.55 估算：'user.avatar'=11 字符，基准宽度 16*0.55*11=96.8
+    // 目标宽度 = 480*0.85 = 408 → 字号 = 16*408/96.8 ≈ 67.44（未触发高度上限 320*0.6=192）
+    expect(parseFloat(ctx.font)).toBeCloseTo(67.44, 1);
+    // 叠加层以对象中心为基准：边框贴显示边缘（-dw/2+2k, -dh/2+2k, dw-4k, dh-4k）
+    expect(ctx.strokeRect).toHaveBeenCalledWith(-240 + 4, -160 + 4, 480 - 8, 320 - 8);
+    // 图片 icon 已删除：叠加层不再绘制任何矩形填充
+    expect(ctx.fillRect).not.toHaveBeenCalled();
+    // 变量名水平垂直居中于对象中心
+    const labelCall = ctx.fillText.mock.calls.find((args) => args[0] === 'user.avatar');
+    expect(labelCall).toBeTruthy();
+    expect(labelCall[1]).toBeCloseTo(0);
+    expect(labelCall[2]).toBeCloseTo(0);
+  });
+
+  it('非等比缩放（scaleX=2, scaleY=0.5）：字号受高度上限 60% 约束，字形不被拉伸', async () => {
+    const img = await plugin.createVariableImage(VAR_URL);
+    img.set({ scaleX: 2, scaleY: 0.5 });
+    const ctx = makeMockCtx();
+    img._render(ctx);
+    // 反缩放补偿：抵消对象缩放，文字在屏幕坐标系中绘制
+    expect(ctx.scale).toHaveBeenCalledWith(1 / 2, 1 / 0.5);
+    // 目标字号 67.44，但高度上限 dh*0.6 = 80*0.6 = 48 → 48px
+    expect(parseFloat(ctx.font)).toBeCloseTo(48, 1);
+    // 边框贴显示边缘：以对象中心为原点，不偏移到右下角
+    expect(ctx.strokeRect).toHaveBeenCalledWith(-240 + 1, -40 + 1, 480 - 2, 80 - 2);
+    // 图片 icon 已删除
+    expect(ctx.fillRect).not.toHaveBeenCalled();
+    // 变量名文本：水平垂直居中于对象中心
+    const labelCall = ctx.fillText.mock.calls.find((args) => args[0] === 'user.avatar');
+    expect(labelCall).toBeTruthy();
+    expect(labelCall[1]).toBeCloseTo(0); // 水平居中（对象中心 x=0）
+    expect(labelCall[2]).toBeCloseTo(0); // 垂直居中（对象中心 y=0）
+  });
+
+  it('普通图片改为变量 URL：就地挂载叠加层渲染（type 保持 image，不换对象）', (done) => {
+    const plain = new fabric.Image(makeImageElement('https://cdn.example.com/normal.png'), {});
+    plain.set({ left: 10, top: 20, width: 240, height: 160 });
+    plugin.updateVariableImage(plain, VAR_URL).then((out) => {
+      expect(out).toBe(plain);
+      expect(plain.type).toBe('image');
+      expect(plain._variableOverlayAttached).toBe(true);
+      expect(plain.get('isVariableImage')).toBe(true);
+      expect(plain.get('showPlaceholderText')).toBe(true);
+      expect(plain.get('variableLabel')).toBe('user.avatar');
+      expect(plain.toObject().src).toBe(VAR_URL);
+      done();
+    });
+  });
+
+  it('变量图改回普通 URL：关闭叠加层（showPlaceholderText=false）', (done) => {
+    plugin.createVariableImage(VAR_URL).then((img) => {
+      const REAL = 'https://cdn.example.com/real.png';
+      plugin.updateVariableImage(img, REAL).then((out) => {
+        expect(out.get('showPlaceholderText')).toBe(false);
+        expect(out.get('isVariableImage')).not.toBe(true);
+        expect(out.toObject().src).toBe(REAL);
+        done();
+      });
+    });
+  });
+
+  it('预览加载真实图关闭叠加层，退出预览恢复占位图重新打开', (done) => {
+    plugin.createVariableImage(VAR_URL).then((img) => {
+      const original = { left: 10, top: 20, scaleX: 1, scaleY: 1, width: img.width, height: img.height };
+      // 预览：加载真实图 → 关闭叠加层
+      plugin._reloadImageSrc(img, 'https://cdn.example.com/real.png', original);
+      expect(img.get('showPlaceholderText')).toBe(false);
+      // 退出预览：加载占位图 → 重新打开叠加层
+      plugin._reloadImageSrc(img, VAR_URL, original);
+      expect(img.get('showPlaceholderText')).toBe(true);
       done();
     });
   });
