@@ -37,9 +37,10 @@ var errorCorrectionLevelType;
     errorCorrectionLevelType["H"] = "H";
 })(errorCorrectionLevelType || (errorCorrectionLevelType = {}));
 class QrCodePlugin {
-    constructor(canvas, editor) {
+    constructor(canvas, editor, options = {}) {
         this.canvas = canvas;
         this.editor = editor;
+        this.options = options;
     }
     async hookTransform(object) {
         if (object.extensionType === 'qrcode') {
@@ -57,8 +58,9 @@ class QrCodePlugin {
         return base64Str || '';
     }
     _defaultBarcodeOption() {
+        const defaultData = (this.options && this.options.defaultData) || 'https://example.com';
         return {
-            data: 'https://kuaitu.cc',
+            data: defaultData,
             width: 300,
             margin: 10,
             errorCorrectionLevel: 'M',

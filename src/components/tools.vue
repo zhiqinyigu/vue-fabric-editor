@@ -6,12 +6,6 @@
         <InsertImgIcon width="26" height="26"></InsertImgIcon>
         <span>{{ $t('insertFile.insert_picture_label') }}</span>
       </span>
-      <span
-        :title="$t('insertFile.insert_online_image')"
-        @click="insertTypeHand('insertOnlineImgModal')"
-      >
-        <InsertOnlineImgIcon width="26" height="26"></InsertOnlineImgIcon>
-      </span>
       <span :title="$t('insertFile.insert_SVG')" @click="insertTypeHand('insertSvg')">
         <InsertSvgIcon width="26" height="26"></InsertSvgIcon>
         <span>{{ $t('insertFile.insert_SVG_label') }}</span>
@@ -21,7 +15,7 @@
         <span>{{ $t('insertFile.insert_SVGStr_label') }}</span>
       </span>
     </div>
-    <Divider plain orientation="left">{{ $t('text_elements') }}</Divider>
+    <Divider plain orientation="left">{{ $t('common_elements') }}</Divider>
     <div class="tool-box">
       <span :draggable="true" @click="() => addText()" @dragend="addText">
         <TextIcon width="26" height="26"></TextIcon>
@@ -31,15 +25,6 @@
         <TextBoxIcon width="26" height="26"></TextBoxIcon>
         <span>{{ $t('textTool.textBox') }}</span>
       </span>
-      <span
-        :class="state.isDrawingLineMode && state.lineType === 'pathText' && 'bg'"
-        @click="pathTextDraw"
-      >
-        <TextPathIcon width="26" height="26"></TextPathIcon>
-      </span>
-    </div>
-    <Divider plain orientation="left">{{ $t('common_elements') }}</Divider>
-    <div class="tool-box">
       <span :draggable="true" @click="() => addRect()" @dragend="addRect">
         <RectIcon width="26" height="26"></RectIcon>
       </span>
@@ -128,13 +113,11 @@
         :placeholder="$t('insertFile.insert_JSON_placeholder')"
       />
     </Modal>
-    <!-- 在线图片弹窗（能力驱动：注册 asset 适配器自动升级，或业务整体覆盖） -->
-    <OnlineImageModal ref="onlineImgRef" />
   </div>
 </template>
 
 <script>
-import { reactive, ref, onDeactivated } from '@vue/composition-api';
+import { reactive, onDeactivated } from '@vue/composition-api';
 import { v4 as uuid } from 'uuid';
 import { Message } from 'view-design';
 import { getPolygonVertices } from '@/utils/math';
@@ -150,25 +133,22 @@ import PolygonIcon from '@/assets/icon/tools/polygon.svg';
 import RectIcon from '@/assets/icon/tools/rect.svg';
 import TextIcon from '@/assets/icon/tools/text.svg';
 import TextBoxIcon from '@/assets/icon/tools/textBox.svg';
-import TextPathIcon from '@/assets/icon/tools/textPath.svg';
 import TriangleIcon from '@/assets/icon/tools/triangle.svg';
 
 import QrCodeIcon from '@/assets/icon/tools/qrCode.svg';
 import BarCodeIcon from '@/assets/icon/tools/barCode.svg';
 import InsertImgIcon from '@/assets/icon/tools/insertImg.svg';
-import InsertOnlineImgIcon from '@/assets/icon/tools/insertOnlineImg.svg';
 import InsertSvgIcon from '@/assets/icon/tools/insertSvg.svg';
 import InsertSvgStrIcon from '@/assets/icon/tools/insertSvgStr.svg';
 import InsertJsonIcon from '@/assets/icon/tools/insertJson.svg';
 
 import { useI18n } from '@/hooks/useI18n';
-import OnlineImageModal from '@/components/OnlineImageModal.vue';
 
 /**
  * 插入文件（图片 / SVG / SVG 字符串）。
  * 原 @/hooks/useInsertFile.js 集成于此。
  */
-function useInsertFile(onlineImgOpen) {
+function useInsertFile() {
   const { t } = useI18n();
   const { getImgStr, selectFiles } = Utils;
   const { fabric, canvasEditor } = useSelect();
@@ -220,10 +200,6 @@ function useInsertFile(onlineImgOpen) {
           });
         });
       });
-    },
-    // 弹出插入在线图片弹窗
-    insertOnlineImgModal: function () {
-      onlineImgOpen && onlineImgOpen();
     },
     // 插入Svg
     insertSvg: function () {
@@ -300,27 +276,21 @@ export default {
     RectIcon,
     TextIcon,
     TextBoxIcon,
-    TextPathIcon,
     TriangleIcon,
     QrCodeIcon,
     BarCodeIcon,
     InsertImgIcon,
-    InsertOnlineImgIcon,
     InsertSvgIcon,
     InsertSvgStrIcon,
     InsertJsonIcon,
-    OnlineImageModal,
   },
   props: {
-    defaultText: String,
-    defaultTextbox: String,
+    defaultText: { type: String, default: '新建文本' },
+    defaultTextbox: { type: String, default: '新建文本' },
   },
   setup(props) {
     const { fabric, canvasEditor } = useSelect();
-    const onlineImgRef = ref(null);
-    const { state: insertState, insertTypeHand } = useInsertFile(
-      () => onlineImgRef.value && onlineImgRef.value.open()
-    );
+    const { state: insertState, insertTypeHand } = useInsertFile();
     const LINE_TYPE = {
       line: 'line',
       arrow: 'arrow',
@@ -450,36 +420,6 @@ export default {
       }
     };
 
-    // 路径文字：自由绘制一条路径（自动平滑），松手即生成挂在路径上的文本
-    const pathTextDraw = () => {
-      if (state.lineType === LINE_TYPE.pathText) {
-        canvasEditor.endTextPathDraw();
-        state.lineType = false;
-        state.isDrawingLineMode = false;
-        ensureObjectSelEvStatus(!state.isDrawingLineMode, !state.isDrawingLineMode);
-      } else {
-        endConflictTools();
-        endDrawingLineMode();
-        state.lineType = LINE_TYPE.pathText;
-        state.isDrawingLineMode = true;
-        ensureObjectSelEvStatus(!state.isDrawingLineMode, !state.isDrawingLineMode);
-        canvasEditor.startTextPathDraw({
-          defaultText: props.defaultText,
-          defaultFontSize: 20,
-          color: '#000000',
-          lineColor: '#000000',
-          width: 2,
-          onCreated: (textObject) => {
-            state.lineType = false;
-            state.isDrawingLineMode = false;
-            ensureObjectSelEvStatus(!state.isDrawingLineMode, !state.isDrawingLineMode);
-            canvasEditor.canvas.setActiveObject(textObject);
-            canvasEditor.canvas.renderAll();
-          },
-        });
-      }
-    };
-
     const endConflictTools = () => {
       canvasEditor.discardPolygon();
       canvasEditor.endDraw();
@@ -535,7 +475,6 @@ export default {
       canvasEditor,
       insertState,
       insertTypeHand,
-      onlineImgRef,
       addText,
       addTextBox,
       addTriangle,
@@ -544,7 +483,6 @@ export default {
       addRect,
       drawPolygon,
       freeDraw,
-      pathTextDraw,
       drawingLineModeSwitch,
     };
   },
@@ -590,15 +528,5 @@ export default {
 }
 .img {
   width: 20px;
-}
-.online-img-option {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-}
-.online-img-tip {
-  margin-left: 8px;
-  font-size: 12px;
-  color: #999;
 }
 </style>

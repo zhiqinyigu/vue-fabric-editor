@@ -9,10 +9,7 @@
 
 <template>
   <div class="save-box">
-    <Button style="margin-left: 10px" type="text" @click="beforeClear">
-      {{ $t('save.empty') }}
-    </Button>
-    <Dropdown placement="bottom-end" style="margin-left: 10px" @on-click="saveWith">
+    <Dropdown placement="bottom-end" @on-click="saveWith">
       <Button type="primary">
         {{ $t('save.down') }}
         <Icon type="ios-arrow-down"></Icon>
@@ -29,15 +26,13 @@
 </template>
 
 <script>
-import { Modal, Message } from 'view-design';
+import { Message } from 'view-design';
 import { debounce } from 'lodash-es';
-import { useI18n } from '@/hooks/useI18n';
 import useSelect from '@/hooks/select';
 
 export default {
   name: 'SaveBar',
   setup() {
-    const { t } = useI18n();
     const { canvasEditor } = useSelect();
 
     const cbMap = {
@@ -61,33 +56,9 @@ export default {
       cbMap[type] && typeof cbMap[type] === 'function' && cbMap[type]();
     }, 300);
 
-    const clear = () => {
-      canvasEditor.clear();
-      // 清空后重置历史记录，避免清空后仍可撤销/重做
-      canvasEditor.getPlugin('HistoryPlugin')?.clearAndSaveState?.();
-    };
-
-    const beforeClear = () => {
-      Modal.confirm({
-        title: t('tip'),
-        content: `<p>${t('clearTip')}</p>`,
-        okText: t('ok'),
-        cancelText: t('cancel'),
-        onOk: () => clear(),
-      });
-    };
-
     return {
-      beforeClear,
       saveWith,
     };
   },
 };
 </script>
-
-<style scoped lang="less">
-.save-box {
-  display: inline-block;
-  padding-right: 10px;
-}
-</style>

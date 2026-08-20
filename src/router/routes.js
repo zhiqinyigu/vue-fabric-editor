@@ -27,6 +27,10 @@ const routes = [
     path: '/template',
     component: () => import('@/views/template/index.vue'),
   },
+  {
+    path: '/demo',
+    component: () => import('@/views/demo/index.vue'),
+  },
 ];
 
 export default routes;

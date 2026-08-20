@@ -1,7 +1,42 @@
-﻿module.exports = {
+﻿const isLib =
+  process.argv.indexOf('--target') !== -1 &&
+  process.argv[process.argv.indexOf('--target') + 1] === 'lib';
+
+const libExternals = {
+  vue: 'vue',
+  'view-design': 'view-design',
+  '@vue/composition-api': '@vue/composition-api',
+  fabric: 'fabric',
+  'lodash-es': 'lodash-es',
+  dayjs: 'dayjs',
+  qs: 'qs',
+  uuid: 'uuid',
+  'vue-i18n': 'vue-i18n',
+  fontfaceobserver: 'fontfaceobserver',
+  'hotkeys-js': 'hotkeys-js',
+  jsbarcode: 'jsbarcode',
+  'qr-code-styling': 'qr-code-styling',
+  'svg-path-editor-lib': 'svg-path-editor-lib',
+  'number-precision': 'number-precision',
+  events: 'events',
+  tapable: 'tapable',
+  'vue-clipboard2': 'vue-clipboard2',
+  'vue-cropper': 'vue-cropper',
+  'vue-lazyload': 'vue-lazyload',
+  'vue-masonry': 'vue-masonry',
+  '@webtoon/psd': '@webtoon/psd',
+  'core-js': 'core-js',
+};
+
+module.exports = {
   transpileDependencies: [],
   productionSourceMap: false,
   publicPath: process.env.NODE_ENV === 'production' ? process.env.VUE_APP_BASE_PATH || '/' : '/',
+  configureWebpack: isLib
+    ? {
+        externals: libExternals,
+      }
+    : {},
   devServer: {
     port: 3000,
     open: true,

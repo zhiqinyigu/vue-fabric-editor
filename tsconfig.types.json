@@ -1,0 +1,17 @@
+{
+  "//": "类型声明冒烟校验：只检查 types/*.d.ts 与消费侧用例（tests/types/usage.ts），不产出文件（npm run typecheck / CI）",
+  "compilerOptions": {
+    "target": "es2018",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "lib": ["es2018", "dom"],
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": [],
+    "baseUrl": "."
+  },
+  "include": ["types", "tests/types"]
+}

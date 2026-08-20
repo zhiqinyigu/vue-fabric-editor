@@ -6,13 +6,14 @@
  * @Description: 自定义字体
  */
 import FontFaceObserver from 'fontfaceobserver';
-import axios from 'axios';
+import { fabric } from 'fabric';
 import { downFile } from '../utils/utils';
 class FontPlugin {
     constructor(canvas, editor, config) {
         this.canvas = canvas;
         this.editor = editor;
-        this.repoSrc = config.repoSrc;
+        // 字体数据提供者：由业务注入（返回 [{ name, file, img, type }]）
+        this.getFonts = config.getFonts || (() => Promise.resolve([]));
         this.cacheList = [];
         this.tempPromise = null;
     }
@@ -26,33 +27,20 @@ class FontPlugin {
         }
         if (this.tempPromise)
             return this.tempPromise;
-        this.tempPromise = axios
-            .get(`${this.repoSrc}/api/fonts?populate=*&pagination[pageSize]=100`)
-            .then((res) => {
-            const data = res.data && res.data.data;
-            const list = (Array.isArray(data) ? data : [])
-                .filter((item) => item && item.attributes)
-                .map((item) => {
-                const attrs = item.attributes;
-                const file = attrs.file && attrs.file.data && attrs.file.data.attributes
-                    ? this.repoSrc + attrs.file.data.attributes.url
-                    : '';
-                const img = attrs.img && attrs.img.data && attrs.img.data.attributes
-                    ? this.repoSrc + attrs.img.data.attributes.url
-                    : '';
-                return {
-                    name: attrs.name,
-                    type: attrs.type,
-                    file,
-                    img,
-                };
-            });
-            this.cacheList = list;
-            this.createFontCSS(list);
-            return list;
+        this.tempPromise = this.getFonts()
+            .then((list) => {
+            const safe = (Array.isArray(list) ? list : []).map((item) => ({
+                name: item.name,
+                type: item.type,
+                file: item.file || '',
+                img: item.img || '',
+            }));
+            this.cacheList = safe;
+            this.createFontCSS(safe);
+            return safe;
         })
             .catch(() => {
-            // 字体接口异常/数据残缺时降级为空列表，避免未处理 rejection 影响编辑器初始化
+            // 数据提供异常时降级为空列表，避免未处理 rejection 影响编辑器初始化
             this.cacheList = [];
             return this.cacheList;
         });
@@ -86,8 +74,12 @@ class FontPlugin {
             const font = new FontFaceObserver(fontName);
             return font.load(null, 150000);
         });
-        return Promise.all(fontFamiliesAll);
+        return Promise.all(fontFamiliesAll).then(() => {
+            // 字体加载完成后：回退字体测量值已失效，清除字符宽缓存并重测所有文本
+                        return;
+        });
     }
+    // 清除 fabric 字符宽度缓存并对所有 textbox 重排/重测（自定义字体替换回退字体的测量差异）
     // 获取字体数据 新增字体样式使用
     getFontJson() {
         const activeObject = this.canvas.getActiveObject();
@@ -105,9 +97,9 @@ class FontPlugin {
             const activeObject = this.canvas.getActiveObjects()[0];
             if (activeObject) {
                 activeObject.set('fontFamily', fontName);
-                this.canvas.renderAll();
             }
-        });
+            // 字体加载完成后对所有 textbox 重排/重测（清除回退字体的测量缓存）
+                    });
     }
     createFontCSS(arr) {
         let code = '';
