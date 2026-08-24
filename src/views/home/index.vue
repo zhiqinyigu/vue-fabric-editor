@@ -78,6 +78,7 @@ import Editor, {
   MaskPlugin,
   TextClipPlugin,
   VariablePlugin,
+  AutoGrowPlugin,
 } from '@/core/index';
 
 const APIHOST = process.env.VUE_APP_APIHOST;
@@ -152,7 +153,8 @@ export default {
         .use(LockPlugin)
         .use(AddBaseTypePlugin)
         .use(MaskPlugin)
-        .use(VariablePlugin);
+        .use(VariablePlugin)
+        .use(AutoGrowPlugin);
 
       state.show = true;
       // 默认打开标尺

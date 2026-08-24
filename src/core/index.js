@@ -41,6 +41,7 @@ export { default as LockPlugin } from './plugin/LockPlugin';
 export { default as AddBaseTypePlugin } from './plugin/AddBaseTypePlugin';
 export { default as TextClipPlugin } from './plugin/TextClipPlugin';
 export { default as VariablePlugin } from './plugin/VariablePlugin';
+export { default as AutoGrowPlugin } from './plugin/AutoGrowPlugin';
 export * from './variableEngine';
 import EventType from './eventType';
 import Utils from './utils/utils';

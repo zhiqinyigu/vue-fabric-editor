@@ -221,6 +221,108 @@ function applyRender(obj, data, delimiter) {
   }
 }
 
+/**
+ * 计算自适应增高后的海报高度与元素新位置（纯函数，编辑器与前台用户端共用）
+ *
+ * 规则：
+ *  - autoGrow 对象（文本块）：渲染后底部 = top + height（top 固定，向下生长）
+ *  - follow 对象：相对间距 = 编辑时 followTop - anchorBottom（由 designMap 提供）；
+ *    渲染时 newTop = 锚点渲染后 newBottom + 相对间距；支持链式（锚点可以是另一个 follow 元素）
+ *  - 海报高度 = max(designHeight, 各 autoGrow newBottom, 各 follow newBottom)
+ *
+ * @param {Array} objects 对象数组（JSON 形态），每项至少含：
+ *   - id: 唯一标识（follow 引用锚点用）
+ *   - top / height: 当前坐标（预览渲染后）
+ *   - autoGrow?: boolean 文本块标记
+ *   - follow?: string 锚点 id
+ * @param {Object} opts
+ *   - designHeight: 设计态海报高度（不缩小的下限）
+ *   - designMap: { [id]: { top, bottom } } 编辑态坐标（渲染前），相对间距的基准
+ * @returns {{ height: number, updates: Array<{id, top}> }}
+ *   - height: 渲染后海报高度
+ *   - updates: 需要下移的元素新 top（autoGrow 自身 top 不变，不在此列）
+ */
+/**
+ * 实际渲染高度：fabric 中拉伸对象走 scaleY，width/height 保持初始值，
+ * 渲染高度 = height * scaleY
+ */
+function getScaledHeight(o) {
+  const height = Number(o.height) || 0;
+  return height * (Number(o.scaleY) || 1);
+}
+/**
+ * originY 感知：将 fabric top 统一为"对象顶边"坐标
+ * （fabric top 在 originY='center' 时指中心点；'top' 时即顶边）
+ */
+function getTopEdge(o) {
+  const top = Number(o.top) || 0;
+  return o.originY === 'center' ? top - getScaledHeight(o) / 2 : top;
+}
+/** originY 感知：将"对象顶边"坐标转回 fabric top 语义 */
+function toFabricTop(topEdge, o) {
+  return o.originY === 'center' ? topEdge + getScaledHeight(o) / 2 : topEdge;
+}
+
+function computeAutoGrowSize(objects, opts) {
+  const { designHeight = 0, designMap = {} } = opts || {};
+  if (!Array.isArray(objects)) return { height: designHeight, updates: [] };
+
+  const newBottom = new Map(); // id -> 渲染后底部
+  const resolvedTopEdge = new Map(); // id -> follow 元素渲染后新顶边
+
+  // 1. autoGrow 锚点：渲染后底部 = 顶边 + height
+  objects.forEach((o) => {
+    if (!o || o.id == null || !o.autoGrow) return;
+    const id = String(o.id);
+    const height = getScaledHeight(o);
+    newBottom.set(id, getTopEdge(o) + height);
+  });
+
+  // 2. follow 元素：迭代解析（锚点可能链式指向另一个 follow）
+  const followList = objects.filter((o) => o && o.id != null && o.follow != null);
+  const maxRounds = followList.length + 1;
+  for (let round = 0; round < maxRounds; round++) {
+    let changed = false;
+    followList.forEach((o) => {
+      const id = String(o.id);
+      const anchorId = String(o.follow);
+      const anchorNewBottom = newBottom.get(anchorId);
+      if (anchorNewBottom == null) return; // 锚点未就绪，留待下一轮
+      // 相对间距基准：designMap 优先，缺失时回退当前布局（维持现间距）
+      const design = designMap[id];
+      const anchorDesign = designMap[anchorId];
+      const designTopEdge = design && design.top != null ? design.top : getTopEdge(o);
+      const anchorDesignBottom = anchorDesign && anchorDesign.bottom != null ? anchorDesign.bottom : getTopEdge(o);
+      const gap = designTopEdge - anchorDesignBottom;
+      const newTopEdge = anchorNewBottom + gap;
+      resolvedTopEdge.set(id, newTopEdge);
+      newBottom.set(id, newTopEdge + getScaledHeight(o));
+      changed = true;
+    });
+    if (!changed) break;
+  }
+
+  // 3. 海报高度 = max(设计高, 各元素渲染后底部)
+  let height = Number(designHeight) || 0;
+  newBottom.forEach((b) => {
+    if (b > height) height = b;
+  });
+
+  // 4. updates 按原数组顺序输出（top 为 fabric 语义）
+  const order = new Map();
+  objects.forEach((o, i) => {
+    if (o && o.id != null) order.set(String(o.id), i);
+  });
+  const updates = [];
+  resolvedTopEdge.forEach((topEdge, id) => {
+    const obj = objects.find((o) => o && String(o.id) === id);
+    updates.push({ id, top: toFabricTop(topEdge, obj || {}) });
+  });
+  updates.sort((a, b) => (order.get(a.id) || 0) - (order.get(b.id) || 0));
+
+  return { height, updates };
+}
+
 export {
   DEFAULT_DELIMITER,
   compile,
@@ -234,4 +336,5 @@ export {
   getVariableFieldOfObject,
   getByPath,
   setByPath,
+  computeAutoGrowSize,
 };

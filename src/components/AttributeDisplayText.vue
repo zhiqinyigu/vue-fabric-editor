@@ -7,10 +7,7 @@
 -->
 
 <template>
-  <div v-if="isOne && isMatchType" class="box attr-item-box">
-    <Divider plain orientation="left">
-      <h4>{{ $t('sizeSetting.title') }}</h4>
-    </Divider>
+  <AttrSection v-if="isOne && isMatchType" :title="$t('sizeSetting.title')">
     <div class="size-row">
       <!-- 宽度（frame 宽度，内部对接 fabric width） -->
       <InputNumber
@@ -37,7 +34,7 @@
           class="lock-btn"
           type="text"
           :class="{ locked: baseAttr.clipEnabled }"
-          :icon="baseAttr.clipEnabled ? 'ios-lock' : 'ios-lock-outline'"
+          :icon="baseAttr.clipEnabled ? 'md-lock' : 'md-unlock'"
           @click="toggleClip"
         ></Button>
       </Tooltip>
@@ -47,33 +44,81 @@
     <AttrField split :label="$t('sizeSetting.ellipsis')">
       <iSwitch
         v-model="baseAttr.ellipsisEnabled"
-        :disabled="!baseAttr.clipEnabled"
+        :disabled="!baseAttr.clipEnabled && !(baseAttr.autoGrow && baseAttr.autoGrowMaxHeight)"
         size="small"
         @on-change="toggleEllipsis"
       ></iSwitch>
     </AttrField>
 
+    <!-- 自适应增高：尺寸锁关闭时可用，内容增高时海报自动变高 -->
+    <AttrGroup>
+      <template #head>
+        <AttrField split bare>
+          <template #label>
+            <span class="auto-grow-label">{{ $t('sizeSetting.autoGrow') }}</span>
+            <Tooltip placement="top" :content="$t('sizeSetting.autoGrowTip')">
+              <Icon type="ios-help-circle-outline" size="18" />
+            </Tooltip>
+          </template>
+          <iSwitch
+            v-model="baseAttr.autoGrow"
+            :disabled="baseAttr.clipEnabled"
+            size="small"
+            @on-change="toggleAutoGrow"
+          ></iSwitch>
+        </AttrField>
+      </template>
+      <!-- 最小高度 / 最大高度：仅开启自适应增高后显示 -->
+      <template v-if="baseAttr.autoGrow">
+        <div class="auto-grow-margin">
+          <AttrField split bare :label="$t('sizeSetting.autoGrowMinHeight')">
+            <InputNumber
+              v-model="baseAttr.autoGrowMinHeight"
+              placeholder="0"
+              :min="0"
+              @on-change="changeAutoGrowMinHeight"
+            ></InputNumber>
+          </AttrField>
+          <AttrField split bare :label="$t('sizeSetting.autoGrowMaxHeight')">
+            <InputNumber
+              v-model="baseAttr.autoGrowMaxHeight"
+              class="auto-grow-max-height"
+              placeholder="∞"
+              :min="0"
+              @on-change="changeAutoGrowMaxHeight"
+            ></InputNumber>
+          </AttrField>
+        </div>
+      </template>
+    </AttrGroup>
+
     <!-- 旋转 / 透明度 -->
-    <Form :label-width="40" class="form-wrap">
-      <FormItem :label="$t('attributes.angle')">
+    <div class="form-wrap">
+      <AttrField :label="$t('attributes.angle')" :label-width="40">
         <Slider v-model="baseAttr.angle" :max="360" @on-input="changeAngle"></Slider>
-      </FormItem>
-      <FormItem :label="$t('attributes.opacity')">
+      </AttrField>
+      <AttrField :label="$t('attributes.opacity')" :label-width="40">
         <Slider v-model="baseAttr.opacity" @on-input="changeOpacity"></Slider>
-      </FormItem>
-    </Form>
-  </div>
+      </AttrField>
+    </div>
+  </AttrSection>
 </template>
 
 <script>
 import { reactive, getCurrentInstance, onMounted, onBeforeUnmount } from '@vue/composition-api';
 import useSelect from '@/hooks/select';
 import InputNumber from '@/components/inputNumber';
+import AttrSection from '@/components/attrPanel/AttrSection.vue';
+import AttrField from '@/components/attrPanel/AttrField.vue';
+import AttrGroup from '@/components/attrPanel/AttrGroup.vue';
 
 export default {
   name: 'AttrDisplayText',
   components: {
     InputNumber,
+    AttrSection,
+    AttrField,
+    AttrGroup,
   },
   setup() {
     const update = getCurrentInstance();
@@ -88,6 +133,9 @@ export default {
       height: 0,
       clipEnabled: false,
       ellipsisEnabled: false,
+      autoGrow: false,
+      autoGrowMinHeight: null,
+      autoGrowMaxHeight: null,
     });
 
     const getObj = () => canvasEditor.canvas.getActiveObjects()[0];
@@ -101,6 +149,18 @@ export default {
       baseAttr.width = obj.width;
       baseAttr.clipEnabled = !!obj.clipEnabled;
       baseAttr.ellipsisEnabled = !!obj.ellipsisEnabled;
+      // 自适应增高：读 AutoGrowPlugin 配置
+      const growPlugin = canvasEditor.getPlugin('AutoGrowPlugin');
+      if (growPlugin && growPlugin.getAutoGrowInfo) {
+        const info = growPlugin.getAutoGrowInfo(obj);
+        baseAttr.autoGrow = info.autoGrow;
+        baseAttr.autoGrowMinHeight = info.autoGrowMinHeight;
+        baseAttr.autoGrowMaxHeight = info.autoGrowMaxHeight;
+      } else {
+        baseAttr.autoGrow = !!obj.autoGrow;
+        baseAttr.autoGrowMinHeight = Number(obj.autoGrowMinHeight) || null;
+        baseAttr.autoGrowMaxHeight = Number(obj.autoGrowMaxHeight) || null;
+      }
       // 高度：尺寸锁开启时读 frame（frameHeight），否则读自适应高度
       baseAttr.height = obj.clipEnabled ? obj.frameHeight || 0 : obj.getScaledHeight();
       baseAttr.angle = obj.get('angle') || 0;
@@ -129,13 +189,13 @@ export default {
       baseAttr.height = value;
     };
 
-    // 尺寸锁（裁剪）开关
+    // 尺寸锁（裁剪）开关：与自适应增高互斥
     const toggleClip = () => {
       const obj = getObj();
       if (!obj) return;
       const next = !baseAttr.clipEnabled;
       if (next) {
-        obj.set({ clipEnabled: true });
+        obj.set({ clipEnabled: true, autoGrow: false });
         // 开启时 frame 高度初始化为当前自适应高度
         obj.syncFrame();
       } else {
@@ -147,7 +207,56 @@ export default {
       obj.setControlsVisibility({ mt: next, mb: next });
       canvasEditor.canvas.renderAll();
       baseAttr.clipEnabled = next;
+      baseAttr.autoGrow = false;
       baseAttr.height = next ? obj.frameHeight || 0 : obj.getScaledHeight();
+    };
+
+    // 自适应增高开关（尺寸锁开启时不可用，由模板 :disabled 保证）
+    const toggleAutoGrow = (value) => {
+      const obj = getObj();
+      if (!obj) return;
+      const growPlugin = canvasEditor.getPlugin('AutoGrowPlugin');
+      if (growPlugin && growPlugin.setAutoGrow) {
+        growPlugin.setAutoGrow(obj, value, baseAttr.autoGrowMinHeight, baseAttr.autoGrowMaxHeight);
+      } else {
+        obj.set({ autoGrow: !!value });
+        canvasEditor.canvas.requestRenderAll();
+      }
+      baseAttr.autoGrow = !!value;
+    };
+
+    // 自适应增高最小高度
+    const changeAutoGrowMinHeight = (value) => {
+      const obj = getObj();
+      if (!obj) return;
+      const v = Number(value) || null;
+      const growPlugin = canvasEditor.getPlugin('AutoGrowPlugin');
+      if (growPlugin && growPlugin.setAutoGrow) {
+        growPlugin.setAutoGrow(obj, baseAttr.autoGrow, v, baseAttr.autoGrowMaxHeight);
+      } else {
+        obj.set({ autoGrowMinHeight: v });
+        obj.set('dirty', true);
+        obj.initDimensions && obj.initDimensions();
+        canvasEditor.canvas.requestRenderAll();
+      }
+      baseAttr.autoGrowMinHeight = v;
+    };
+
+    // 自适应增高最大高度
+    const changeAutoGrowMaxHeight = (value) => {
+      const obj = getObj();
+      if (!obj) return;
+      const v = Number(value) || null;
+      const growPlugin = canvasEditor.getPlugin('AutoGrowPlugin');
+      if (growPlugin && growPlugin.setAutoGrow) {
+        growPlugin.setAutoGrow(obj, baseAttr.autoGrow, baseAttr.autoGrowMinHeight, v);
+      } else {
+        obj.set({ autoGrowMaxHeight: v });
+        obj.set('dirty', true);
+        obj.initDimensions && obj.initDimensions();
+        canvasEditor.canvas.requestRenderAll();
+      }
+      baseAttr.autoGrowMaxHeight = v;
     };
 
     // 省略号开关
@@ -184,6 +293,9 @@ export default {
       baseAttr.height = 0;
       baseAttr.clipEnabled = false;
       baseAttr.ellipsisEnabled = false;
+      baseAttr.autoGrow = false;
+      baseAttr.autoGrowMinHeight = null;
+      baseAttr.autoGrowMaxHeight = null;
       update && update.proxy && update.proxy.$forceUpdate();
     };
 
@@ -219,6 +331,9 @@ export default {
       changeHeight,
       toggleClip,
       toggleEllipsis,
+      toggleAutoGrow,
+      changeAutoGrowMinHeight,
+      changeAutoGrowMaxHeight,
       changeAngle,
       changeOpacity,
     };
@@ -227,12 +342,8 @@ export default {
 </script>
 
 <style scoped lang="less">
-.ivu-form-item {
-  background: #f6f7f9;
-  border-radius: 5px;
-  padding: 0 5px;
-  margin-bottom: 10px;
-}
+@import './attrPanel/attrPanel.less';
+
 .form-wrap {
   margin-top: 10px;
 }
@@ -259,17 +370,12 @@ export default {
   }
 }
 
-// 省略号开关
-.ellipsis-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 5px 8px;
-  margin-bottom: 8px;
-  background: #f6f7f9;
-  border-radius: 5px;
-  .ellipsis-label {
-    font-size: 14px;
-  }
+// 自适应增高：展开区二级容器（内层行由 AttrToggleGroup 灰底 + AttrField split bare 提供）
+.auto-grow-margin {
+  padding-top: 6px;
+}
+
+/deep/ .auto-grow-max-height input::placeholder {
+  font-size: 22px;
 }
 </style>

@@ -25,7 +25,11 @@
     "resetSize": "Restaurar tamanho original",
     "clipLock": "Tamanho fixo",
     "clipLockOn": "Cancelar tamanho fixo",
-    "ellipsis": "Ativar reticências"
+    "ellipsis": "Ativar reticências",
+    "autoGrow": "Crescimento automático",
+    "autoGrowTip": "Disponível apenas após desligar o tamanho fixo. Quando ativado, o pôster cresce em altura automaticamente conforme o conteúdo cresce.\nGeralmente usado para texto variável, normalmente combinado com o \"Objeto de crescimento a seguir\" do elemento",
+    "autoGrowMinHeight": "Altura mínima",
+    "autoGrowMaxHeight": "Altura máxima"
   },
   "positionInfo": "Posição",
   "flip": {
@@ -185,6 +189,8 @@
   },
   "attributes": {
     "id": "ID",
+    "follow": "Seguir objeto crescente",
+    "followNone": "Nenhum",
     "online_image_url": "URL da imagem online",
     "apply": "Aplicar",
     "apply_success": "URL da imagem atualizada",

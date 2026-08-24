@@ -61,7 +61,9 @@ export default {
         baseAttr[key] = value;
         if (key === 'text') {
           activeObject.set(key, value);
-          // 文本变化会重算尺寸，触发属性面板（尺寸/位置）刷新
+          // 文本变化会重算尺寸；复用 text:changed 契约（画布编辑路径同样派发），
+          // 让尺寸/位置面板与 AutoGrowPlugin 同步（否则 .set('text') 不触发增高）。
+          canvasEditor.canvas.fire('text:changed', { target: activeObject });
           canvasEditor.emit('selectOne', [activeObject]);
         } else {
           const path = activeObject.get('path');

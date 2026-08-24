@@ -12,8 +12,10 @@ import {
   renderObjects,
   extractVariables,
   getVariableFieldOfObject,
+  computeAutoGrowSize,
 } from '../../src/core/variableEngine';
 import VariablePlugin from '../../src/core/plugin/VariablePlugin';
+import AutoGrowPlugin from '../../src/core/plugin/AutoGrowPlugin';
 
 const VAR_URL = 'https://cdn.example.com/avatar/{{user.avatar}}';
 
@@ -670,6 +672,131 @@ describe('VariableImage 矢量叠加层：type 保持 image，任意缩放文字
   });
 });
 
+describe('computeAutoGrowSize：海报根据文字内容自适应增高', () => {
+  // 设计态：海报高 800；笔记文本(笔记, autoGrow) top=300 height=100（bottom=400）；
+  // 页脚(footer) follow=笔记 top=450（gap=50）；底部点缀(decoration) follow=页脚 top=500
+  const designMap = {
+    笔记: { top: 300, bottom: 400 },
+    页脚: { top: 450, bottom: 490 },
+    点缀: { top: 500, bottom: 540 },
+  };
+
+  it('autoGrow 文本变高后海报增高，底部 = top + height + margin', () => {
+    // 渲染真实数据后：笔记 height 100 -> 400
+    const objects = [{ id: '笔记', top: 300, height: 400, autoGrow: true }];
+    const { height, updates } = computeAutoGrowSize(objects, { designHeight: 800, designMap });
+    expect(height).toBe(800); // 300 + 400 = 700 < 800，取设计高 800
+    expect(updates).toEqual([]);
+  });
+
+  it('autoGrow 超高时海报高度取内容底部，不再缩回设计高', () => {
+    const objects = [{ id: '笔记', top: 300, height: 600, autoGrow: true }];
+    const { height } = computeAutoGrowSize(objects, { designHeight: 800, designMap });
+    expect(height).toBe(900); // 300 + 600 = 900 > 800
+  });
+
+  it('follow 元素保持编辑时相对间距随锚点下移', () => {
+    const objects = [
+      { id: '笔记', top: 300, height: 600, autoGrow: true },
+      { id: '页脚', top: 450, height: 40, follow: '笔记' },
+    ];
+    const { height, updates } = computeAutoGrowSize(objects, { designHeight: 800, designMap });
+    // 笔记 newBottom = 300 + 600 = 900；页脚 gap = 450 - 400 = 50 → newTop = 950
+    expect(updates).toEqual([{ id: '页脚', top: 950 }]);
+    // 海报高 = max(800, 900, 990) = 990
+    expect(height).toBe(990);
+  });
+
+  it('follow 链式：点缀跟随页脚、页脚跟随笔记', () => {
+    const objects = [
+      { id: '笔记', top: 300, height: 600, autoGrow: true },
+      { id: '页脚', top: 450, height: 40, follow: '笔记' },
+      { id: '点缀', top: 500, height: 40, follow: '页脚' },
+    ];
+    const { height, updates } = computeAutoGrowSize(objects, { designHeight: 800, designMap });
+    // 页脚 newTop = 950；点缀 gap = 500 - 490 = 10 → newTop = 950 + 40 + 10 = 1000
+    expect(updates).toEqual([
+      { id: '页脚', top: 950 },
+      { id: '点缀', top: 1000 },
+    ]);
+    expect(height).toBe(1040); // 点缀 bottom = 1000 + 40
+  });
+
+  it('designMap 缺失时回退当前布局，保持现有相对间距', () => {
+    const objects = [
+      { id: '笔记', top: 300, height: 600, autoGrow: true },
+      { id: '页脚', top: 450, height: 40, follow: '笔记' },
+    ];
+    const { updates } = computeAutoGrowSize(objects, { designHeight: 800 });
+    // 锚点 bottom 缺省按 follow 自身 top 兜底 → gap = 0 → newTop = 900
+    expect(updates).toEqual([{ id: '页脚', top: 900 }]);
+  });
+
+  it('无 autoGrow / follow 时返回设计高与空 updates', () => {
+    const { height, updates } = computeAutoGrowSize([{ id: 'a', top: 0, height: 10 }], { designHeight: 800 });
+    expect(height).toBe(800);
+    expect(updates).toEqual([]);
+  });
+
+  it('空对象数组回退设计高', () => {
+    expect(computeAutoGrowSize([], { designHeight: 800 })).toEqual({ height: 800, updates: [] });
+  });
+
+  it('originY=center 时按中心点换算顶边，保持一致语义', () => {
+    // 编辑态：笔记 top=300(中心)，height=100 → 顶边=250，底边=350；页脚 gap = 450-350 = 100
+    const map = {
+      笔记: { top: 250, bottom: 350 },
+      页脚: { top: 450, bottom: 490 },
+    };
+    // 渲染后：笔记 height 100→600（顶边固定 250，中心点 top = 250 + 600/2 = 550 → 底边 850）
+    const objects = [
+      { id: '笔记', top: 550, height: 600, originY: 'center', autoGrow: true },
+      { id: '页脚', top: 450, height: 40, originY: 'center', follow: '笔记' },
+    ];
+    const { updates } = computeAutoGrowSize(objects, { designHeight: 800, designMap: map });
+    // 页脚 newTopEdge = 850 + 100 = 950；中心点 top = 950 + 20 = 970
+    expect(updates).toEqual([{ id: '页脚', top: 970 }]);
+  });
+
+  it('follow 元素被拉伸（scaleY=2）：海报高度按实际渲染高度计算', () => {
+    // 点缀设计高 40，被拉伸到实际渲染高 80（fabric 拉伸走 scaleY，height 保持 40）
+    const objects = [
+      { id: '笔记', top: 300, height: 600, autoGrow: true },
+      { id: '页脚', top: 450, height: 40, follow: '笔记' },
+      { id: '点缀', top: 500, height: 40, scaleY: 2, follow: '页脚' },
+    ];
+    const { height, updates } = computeAutoGrowSize(objects, { designHeight: 800, designMap });
+    // 页脚 newTop = 950；点缀 gap = 10 → newTop = 1000，实际 bottom = 1000 + 40*2 = 1080
+    expect(updates).toEqual([
+      { id: '页脚', top: 950 },
+      { id: '点缀', top: 1000 },
+    ]);
+    expect(height).toBe(1080); // 修复前误按未缩放高度算成 1040
+  });
+
+  it('autoGrow 锚点被拉伸（scaleY=2）：增高按实际渲染高度', () => {
+    const objects = [{ id: '笔记', top: 300, height: 600, scaleY: 2, autoGrow: true }];
+    const { height, updates } = computeAutoGrowSize(objects, { designHeight: 800, designMap });
+    expect(height).toBe(1500); // 300 + 600*2 = 1500；修复前误算为 900
+    expect(updates).toEqual([]);
+  });
+
+  it('originY=center 且被拉伸：顶边/底边按实际渲染高度换算', () => {
+    const map = {
+      笔记: { top: 250, bottom: 350 },
+      页脚: { top: 450, bottom: 490 },
+    };
+    // 笔记 height 100、scaleY=2 → 实际高 200；顶边 250，中心 top = 250 + 100 = 350 → 底边 450
+    const objects = [
+      { id: '笔记', top: 350, height: 100, scaleY: 2, originY: 'center', autoGrow: true },
+      { id: '页脚', top: 450, height: 40, originY: 'center', follow: '笔记' },
+    ];
+    const { updates } = computeAutoGrowSize(objects, { designHeight: 800, designMap: map });
+    // 页脚 newTopEdge = 450 + 100 = 550；中心点 top = 550 + 40/2 = 570
+    expect(updates).toEqual([{ id: '页脚', top: 570 }]);
+  });
+});
+
 describe('变量预览：进入预览锁定元素编辑，退出预览恢复交互', () => {
   it('enterPreview 锁定（不可选中/编辑/拖拽/缩放），exitPreview 恢复原交互属性', () => {
     const textbox = new fabric.Textbox('hello {{user.name}}', {
@@ -898,3 +1025,231 @@ describe('VariablePlugin 二维码/条形码预览', () => {
     }
   });
 });
+
+
+describe('AutoGrowPlugin 编辑态实时增高（文本变长海报跟随）', () => {
+  // 设计态：海报 600x800；笔记(note, autoGrow) top=300 height=100（bottom=400）；
+  // 页脚(footer) follow=note top=450（gap=50）。构造函数自动重建几何快照。
+  function setup({ previewing = false } = {}) {
+    const workspace = new fabric.Rect({ id: 'workspace', left: 0, top: 0, width: 600, height: 800 });
+    const note = new fabric.Textbox('短文本', { id: 'note', left: 100, top: 300, width: 300 });
+    note.set({ height: 100, autoGrow: true });
+    const footer = new fabric.Rect({ id: 'footer', left: 0, top: 450, width: 600, height: 40 });
+    footer.set({ follow: 'note' });
+
+    const canvasHandlers = {};
+    const editorHandlers = {};
+    const previewState = { value: previewing }; // 可变引用：同一测试内可切换编辑态/预览态
+    const canvas = {
+      on: (evt, fn) => {
+        canvasHandlers[evt] = fn;
+      },
+      off: jest.fn(),
+      getObjects: () => [workspace, note, footer],
+      requestRenderAll: jest.fn(),
+    };
+    let wsPlugin;
+    const editor = {
+      on: (evt, fn) => {
+        editorHandlers[evt] = fn;
+      },
+      emit: jest.fn(),
+      getPlugin: (name) => {
+        if (name === 'WorkspacePlugin') return wsPlugin;
+        if (name === 'VariablePlugin') return { isPreviewing: () => previewState.value };
+        return null;
+      },
+    };
+    wsPlugin = {
+      getWorkspase: () => workspace,
+      setSizeSilent: jest.fn((w, h) => {
+        workspace.set({ width: w, height: h });
+      }),
+    };
+
+    const plugin = new AutoGrowPlugin(canvas, editor);
+    return { plugin, canvas, editor, workspace, note, footer, canvasHandlers, editorHandlers, wsPlugin, previewState };
+  }
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('粘贴长文本（text:changed 防抖）后海报增高、follow 元素保距下移', () => {
+    jest.useFakeTimers();
+    const { canvasHandlers, workspace, note, footer, wsPlugin } = setup();
+    note.set({ height: 600 }); // 模拟粘贴后文本变高
+    canvasHandlers['text:changed']({ target: note });
+    // 防抖窗口内不生效
+    expect(wsPlugin.setSizeSilent).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(160);
+    // 海报高 = max(800, 300+600=900, 页脚新底部 990) = 990
+    expect(wsPlugin.setSizeSilent).toHaveBeenLastCalledWith(600, 990);
+    expect(workspace.get('height')).toBe(990);
+    // 页脚 gap = 450 - 400 = 50 → newTop = 900 + 50 = 950
+    expect(footer.get('top')).toBe(950);
+  });
+
+  it('文本编辑结束（object:modified）立即增高，不依赖防抖', () => {
+    const { canvasHandlers, workspace, note, footer, wsPlugin } = setup();
+    note.set({ height: 600 });
+    canvasHandlers['object:modified']({ target: note });
+    expect(wsPlugin.setSizeSilent).toHaveBeenLastCalledWith(600, 990);
+    expect(workspace.get('height')).toBe(990);
+    expect(footer.get('top')).toBe(950);
+  });
+
+  it('手动拖拽 follow 元素：新位置落为基准，不被吸附回原位', () => {
+    const { canvasHandlers, workspace, note, footer, wsPlugin } = setup();
+    // 先让锚点内容变高：页脚保距下移
+    note.set({ height: 600 });
+    canvasHandlers['object:modified']({ target: note });
+    expect(footer.get('top')).toBe(950);
+    // 用户再把页脚手动拖到 500：应尊重手动定位
+    footer.set({ top: 500 });
+    canvasHandlers['object:modified']({ target: footer });
+    expect(footer.get('top')).toBe(500);
+    // 海报高度保持增高后的 990，不因拖拽回缩
+    expect(workspace.get('height')).toBe(990);
+  });
+
+  it('只增不减：手动调高海报后内容变短不缩回', () => {
+    const { plugin, workspace, note, wsPlugin } = setup();
+    workspace.set({ height: 1200 }); // 用户手动调高海报
+    note.set({ height: 50 }); // 文本变短
+    plugin.syncEditorHeight();
+    expect(workspace.get('height')).toBe(1200); // 保持手动高度
+    expect(wsPlugin.setSizeSilent).not.toHaveBeenCalled();
+  });
+
+  it('预览态：text:changed 不触发编辑态增高（由 applyAutoGrow 处理）', () => {
+    jest.useFakeTimers();
+    const { canvasHandlers, note, wsPlugin } = setup({ previewing: true });
+    note.set({ height: 600 });
+    canvasHandlers['text:changed']({ target: note });
+    jest.advanceTimersByTime(160);
+    expect(wsPlugin.setSizeSilent).not.toHaveBeenCalled();
+  });
+
+  it('开启自适应增高（setAutoGrow）后立即按当前内容增高', () => {
+    const { plugin, workspace, note, footer, wsPlugin } = setup();
+    // 模拟模板导入时文本未标记 autoGrow、但内容已很长
+    note.set({ autoGrow: false });
+    plugin._rebuildDesignMap();
+    // 长文本（含空格可换行）使 initDimensions 自然产出大高度
+    note.set({ text: '这是一段很长的测试文本用来模拟内容溢出 '.repeat(20) });
+    plugin.setAutoGrow(note, true);
+    // setAutoGrow 内部调用 initDimensions 重算高度，然后触发 syncEditorHeight
+    var noteH = note.height;
+    expect(noteH).toBeGreaterThan(100);
+    var noteBottom = 300 + noteH;
+    var footerTop = noteBottom + 50; // 设计间距 50
+    expect(wsPlugin.setSizeSilent).toHaveBeenCalled();
+    expect(workspace.get('height')).toBeGreaterThanOrEqual(noteBottom + 40);
+    expect(footer.get('top')).toBe(footerTop);
+  });
+
+  it('链式跟随：页脚跟笔记、点缀跟页脚，编辑态一并下移', () => {
+    const { plugin, canvas, workspace, note, footer, canvasHandlers, wsPlugin } = setup();
+    const decoration = new fabric.Rect({ id: 'decoration', left: 0, top: 500, width: 600, height: 40 });
+    decoration.set({ follow: 'footer' });
+    canvas.getObjects = () => [workspace, note, footer, decoration];
+    plugin._rebuildDesignMap(); // 收录点缀 {500,540}
+    note.set({ height: 600 });
+    canvasHandlers['object:modified']({ target: note });
+    // 页脚 newTop = 900 + 50 = 950；点缀 gap = 500 - 490 = 10 → newTop = 950 + 40 + 10 = 1000
+    expect(footer.get('top')).toBe(950);
+    expect(decoration.get('top')).toBe(1000);
+    // 海报高 = max(800, 900, 990, 1040) = 1040
+    expect(wsPlugin.setSizeSilent).toHaveBeenLastCalledWith(600, 1040);
+    expect(workspace.get('height')).toBe(1040);
+  });
+
+  it('拖拽其它元素（非锚点、非 follow）：点缀图保持原位不被位移', () => {
+    const { plugin, canvas, workspace, note, footer, canvasHandlers, wsPlugin } = setup();
+    const decoration = new fabric.Rect({ id: 'decoration', left: 0, top: 500, width: 600, height: 40 });
+    decoration.set({ follow: 'footer' });
+    const box = new fabric.Rect({ id: 'box', left: 0, top: 700, width: 600, height: 60 });
+    canvas.getObjects = () => [workspace, note, footer, decoration, box];
+    plugin._rebuildDesignMap(); // 收录 点缀{500,540}、box{700,760}
+    // 用户拖拽 box 下移到 900（box 底部 960 超出设计高 800 → 海报增高）
+    box.set({ top: 900 });
+    canvasHandlers['object:modified']({ target: box });
+    // 点缀图与页脚应保持原位：锚点未变，相对间距不变
+    expect(decoration.get('top')).toBe(500);
+    expect(footer.get('top')).toBe(450);
+    // 普通元素 box 不参与海报高度计算（仅 autoGrow/follow 计入），海报高度不变
+    expect(wsPlugin.setSizeSilent).not.toHaveBeenCalled();
+  });
+
+  it('拖拽其它元素后再次拖拽：点缀图不会累积下移', () => {
+    const { plugin, canvas, workspace, note, footer, canvasHandlers } = setup();
+    const decoration = new fabric.Rect({ id: 'decoration', left: 0, top: 500, width: 600, height: 40 });
+    decoration.set({ follow: 'footer' });
+    const box = new fabric.Rect({ id: 'box', left: 0, top: 700, width: 600, height: 60 });
+    canvas.getObjects = () => [workspace, note, footer, decoration, box];
+    plugin._rebuildDesignMap();
+    box.set({ top: 900 });
+    canvasHandlers['object:modified']({ target: box });
+    box.set({ top: 1000 });
+    canvasHandlers['object:modified']({ target: box });
+    expect(decoration.get('top')).toBe(500);
+    expect(footer.get('top')).toBe(450);
+  });
+
+  it('编辑态增高后进入预览：预览进一步增高、follow 再下移，退出恢复编辑态', () => {
+    const { canvasHandlers, editorHandlers, workspace, note, footer, previewState } = setup();
+    // 编辑态内容变长：海报增到 990、页脚 950
+    note.set({ height: 600 });
+    canvasHandlers['object:modified']({ target: note });
+    expect(workspace.get('height')).toBe(990);
+    expect(footer.get('top')).toBe(950);
+
+    // 进入预览：记录当前为设计尺寸、锁定快照
+    previewState.value = true;
+    editorHandlers['variable:previewChange'](true);
+    // 预览渲染真实数据更长：height 600 -> 1000
+    note.set({ height: 1000 });
+    editorHandlers['variable:previewRefresh']();
+    // note bottom = 1300；页脚 gap = 950 - 900 = 50 → newTop = 1350
+    expect(footer.get('top')).toBe(1350);
+    expect(workspace.get('height')).toBe(1390); // 页脚 bottom = 1350 + 40
+
+    // 退出预览：恢复编辑态位置与高度
+    previewState.value = false;
+    editorHandlers['variable:previewExit']();
+    expect(workspace.get('height')).toBe(990);
+    expect(footer.get('top')).toBe(950);
+  });
+
+  it('编辑态拉伸点缀图（scaleY=2）：海报按实际渲染高度增高', () => {
+    const { plugin, canvas, workspace, note, footer, canvasHandlers, wsPlugin } = setup();
+    const decoration = new fabric.Rect({ id: 'decoration', left: 0, top: 760, width: 600, height: 40 });
+    decoration.set({ follow: 'footer' });
+    canvas.getObjects = () => [workspace, note, footer, decoration];
+    plugin._rebuildDesignMap(); // 收录点缀 {760, 800}
+    // 拉伸点缀：scaleY=2 → 实际渲染高 80，底部 760 + 80 = 840 > 设计高 800
+    decoration.set({ scaleY: 2 });
+    canvasHandlers['object:modified']({ target: decoration });
+    // 点缀保距基准不变（先落新位置 760），实际底部 = 760 + 80 = 840 → 海报增高
+    expect(wsPlugin.setSizeSilent).toHaveBeenLastCalledWith(600, 840);
+    expect(workspace.get('height')).toBe(840);
+  });
+
+  it('预览态拉伸点缀图：applyAutoGrow 按实际渲染高度增高', () => {
+    const { plugin, canvas, workspace, note, footer, editorHandlers, previewState } = setup();
+    const decoration = new fabric.Rect({ id: 'decoration', left: 0, top: 760, width: 600, height: 40 });
+    decoration.set({ follow: 'footer' });
+    canvas.getObjects = () => [workspace, note, footer, decoration];
+    plugin._rebuildDesignMap(); // 收录点缀 {760, 800}
+    // 进入预览：锁定 designMap、记录设计高 800
+    previewState.value = true;
+    editorHandlers['variable:previewChange'](true);
+    // 预览中拉伸点缀：scaleY=2 → 实际高 80
+    decoration.set({ scaleY: 2 });
+    editorHandlers['variable:previewRefresh']();
+    // 点缀 gap = 760 - 490 = 270 → newTop 760，实际底部 840 → 海报增高
+    expect(workspace.get('height')).toBe(840);
+  });
+});
+

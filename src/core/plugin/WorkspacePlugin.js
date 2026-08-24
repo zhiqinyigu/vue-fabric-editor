@@ -131,6 +131,47 @@ class WorkspacePlugin {
         this._syncBackgroundImage();
         this.auto();
     }
+    /**
+     * 静默调整画布尺寸：仅更新 workspace 尺寸与背景图，不改动视口缩放
+     * （供"海报自适应增高"使用，避免预览态缩放跳变）
+     * @param {number} width
+     * @param {number} height
+     */
+    setSizeSilent(width, height) {
+        this._initBackground();
+        this.option.width = width;
+        this.option.height = height;
+        // 重新设置workspace
+        this.workspace = this.canvas
+            .getObjects()
+            .find((item) => item.id === 'workspace');
+        this.workspace.set('width', width);
+        this.workspace.set('height', height);
+        this.editor.emit('sizeChange', this.workspace.width, this.workspace.height);
+        // 同步背景图尺寸（就地更新，避免异步重建的竞态与闪烁）
+        this._syncBackgroundImageSilent();
+        // 同步裁切区域（clipPath 跟随新尺寸，增高部分不再被裁切）
+        this._updateClipPath();
+        this.canvas.requestRenderAll();
+    }
+    // 更新画布裁切区域：克隆当前 workspace 作为 clipPath（高度变化时跟随）
+    _updateClipPath() {
+        const ws = this.getWorkspase();
+        if (!ws) return;
+        ws.clone((cloned) => {
+            // 兜底：以最新 workspace 几何覆盖，避免异步乱序导致 clip 尺寸回退
+            cloned.set({
+                width: ws.get('width'),
+                height: ws.get('height'),
+                left: ws.get('left'),
+                top: ws.get('top'),
+                scaleX: ws.get('scaleX'),
+                scaleY: ws.get('scaleY'),
+            });
+            this.canvas.clipPath = cloned;
+            this.canvas.requestRenderAll();
+        });
+    }
     setZoomAuto(scale, cb) {
         const { workspaceEl } = this;
         const width = workspaceEl.offsetWidth;
@@ -223,28 +264,24 @@ class WorkspacePlugin {
         };
         img.src = dataUrl;
     }
-    // 创建背景对象（cover/contain 用 Image，tile 用 Pattern 填充的 Rect）
-    _createBackgroundObject(img, imgW, imgH, workspace, mode) {
+    // 计算背景对象布局（cover/contain 用 Image 的缩放与居中，tile 用 Rect 铺满）
+    // 供创建与就地同步复用；依赖 this.backgroundImageSize（原始像素尺寸）
+    _computeBackgroundLayout(workspace, mode) {
+        if (!workspace) return null;
         const rectW = workspace.width * workspace.scaleX;
         const rectH = workspace.height * workspace.scaleY;
         if (mode === 'tile') {
-            const pattern = new fabric.Pattern({ source: img, repeat: 'repeat' });
-            return new fabric.Rect({
+            return {
                 left: workspace.left,
                 top: workspace.top,
                 width: rectW,
                 height: rectH,
-                fill: pattern,
-                id: 'backgroundImage',
-                backgroundImageMode: 'tile',
-                selectable: false,
-                evented: false,
-                hasControls: false,
-                hoverCursor: 'default',
-                lockMovementX: true,
-                lockMovementY: true,
-            });
+            };
         }
+        const size = this.backgroundImageSize;
+        if (!size || !(size.w > 0) || !(size.h > 0)) return null;
+        const imgW = size.w;
+        const imgH = size.h;
         const rectRatio = rectW / rectH;
         const imgRatio = imgW / imgH;
         let scale;
@@ -257,11 +294,40 @@ class WorkspacePlugin {
         }
         const width = imgW * scale;
         const height = imgH * scale;
-        return new fabric.Image(img, {
+        return {
             left: workspace.left + (rectW - width) / 2,
             top: workspace.top + (rectH - height) / 2,
             scaleX: scale,
             scaleY: scale,
+        };
+    }
+    // 创建背景对象（cover/contain 用 Image，tile 用 Pattern 填充的 Rect）
+    _createBackgroundObject(img, imgW, imgH, workspace, mode) {
+        const layout = this._computeBackgroundLayout(workspace, mode);
+        if (!layout) return null;
+        if (mode === 'tile') {
+            const pattern = new fabric.Pattern({ source: img, repeat: 'repeat' });
+            return new fabric.Rect({
+                left: layout.left,
+                top: layout.top,
+                width: layout.width,
+                height: layout.height,
+                fill: pattern,
+                id: 'backgroundImage',
+                backgroundImageMode: 'tile',
+                selectable: false,
+                evented: false,
+                hasControls: false,
+                hoverCursor: 'default',
+                lockMovementX: true,
+                lockMovementY: true,
+            });
+        }
+        return new fabric.Image(img, {
+            left: layout.left,
+            top: layout.top,
+            scaleX: layout.scaleX,
+            scaleY: layout.scaleY,
             id: 'backgroundImage',
             backgroundImageMode: mode,
             selectable: false,
@@ -271,6 +337,22 @@ class WorkspacePlugin {
             lockMovementX: true,
             lockMovementY: true,
         });
+    }
+    // 就地同步背景图尺寸/位置（同步执行、不重建对象，避免异步竞态与闪烁）
+    _syncBackgroundImageSilent() {
+        const obj = this._getBackgroundImageObj();
+        const workspace = this.getWorkspase();
+        if (!obj || !workspace) return;
+        const mode = obj.backgroundImageMode || this.backgroundImageMode || 'cover';
+        const layout = this._computeBackgroundLayout(workspace, mode);
+        if (!layout) return;
+        obj.set(layout);
+        if (obj.setCoords) obj.setCoords();
+    }
+    // 供其他插件（如 ResizePlugin 拖拽改尺寸）同步背景图
+    syncBackgroundImage() {
+        this._syncBackgroundImageSilent();
+        this.canvas.requestRenderAll();
     }
     // 移除背景图
     removeBackgroundImage() {
@@ -393,6 +475,7 @@ WorkspacePlugin.apis = [
     'auto',
     'one',
     'setSize',
+    'setSizeSilent',
     'getWorkspase',
     'setWorkspaseBg',
     'setCenterFromObject',
@@ -401,5 +484,6 @@ WorkspacePlugin.apis = [
     'setBackgroundOpacity',
     'getBackgroundImage',
     'fitCanvasToBackground',
+    'syncBackgroundImage',
 ];
 export default WorkspacePlugin;

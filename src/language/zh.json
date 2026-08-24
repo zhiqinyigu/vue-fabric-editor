@@ -25,7 +25,11 @@
     "resetSize": "恢复到原始尺寸",
     "clipLock": "固定尺寸",
     "clipLockOn": "取消固定尺寸",
-    "ellipsis": "启用省略号"
+    "ellipsis": "启用省略号",
+    "autoGrow": "自适应增高",
+    "autoGrowTip": "关闭固定尺寸后才可用，开启后内容增高时海报自动变高。\n多用于变量文本的场景，通常结合元素的“跟随增高对象”使用",
+    "autoGrowMinHeight": "最小高度",
+    "autoGrowMaxHeight": "最大高度"
   },
   "positionInfo": "位置",
   "flip": {
@@ -185,6 +189,8 @@
   },
   "attributes": {
     "id": "标识",
+    "follow": "跟随增高对象",
+    "followNone": "不跟随",
     "online_image_url": "在线图片地址",
     "apply": "应用",
     "apply_success": "图片地址已更新",

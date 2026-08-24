@@ -157,6 +157,7 @@ class ServersPlugin {
             'roundValue',
             'backgroundImageMode',
             'isVariableImage',
+            'follow',
         ];
     }
     /**

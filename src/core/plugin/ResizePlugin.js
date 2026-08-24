@@ -200,6 +200,11 @@ class ResizePlugin {
                 this.canvas.clipPath = cloned;
                 this.canvas.requestRenderAll();
             });
+            // 拖拽改尺寸后同步背景图尺寸（就地更新，避免异步重建的闪烁）
+            const wp = this.editor.getPlugin && this.editor.getPlugin('WorkspacePlugin');
+            if (wp && wp.syncBackgroundImage) {
+                wp.syncBackgroundImage();
+            }
             if (['left', 'right'].includes(type)) {
                 this.canvas.defaultCursor = 'ew-resize';
             }

@@ -25,7 +25,11 @@
     "resetSize": "Restore to original size",
     "clipLock": "Fixed size",
     "clipLockOn": "Unlock fixed size",
-    "ellipsis": "Enable ellipsis"
+    "ellipsis": "Enable ellipsis",
+    "autoGrow": "Auto grow",
+    "autoGrowTip": "Available only after turning off fixed size. When enabled, the poster grows taller automatically as content grows.\nMostly used for variable text, usually combined with the element's \"Follow grow object\"",
+    "autoGrowMinHeight": "Min height",
+    "autoGrowMaxHeight": "Max height"
   },
   "positionInfo": "Position",
   "flip": {
@@ -185,6 +189,8 @@
   },
   "attributes": {
     "id": "ID",
+    "follow": "Follow growing object",
+    "followNone": "None",
     "online_image_url": "Online image URL",
     "apply": "Apply",
     "apply_success": "Image URL updated",

@@ -20,46 +20,69 @@ function changeTextWidth(eventData, transform, x, y) {
     target.setPositionByOrigin(anchor, ox, 'top');
     return oldW !== target.width;
 }
-// 高度手柄（mt/mb）：直接改 frameHeight（尺寸锁开启时生效）
+// 高度手柄（mt/mb）：尺寸锁改 frameHeight；自增高改 autoGrowMaxHeight
 function changeTextHeight(eventData, transform, x, y) {
     var target = transform.target;
-    if (!target.clipEnabled) {
+    if (!target.clipEnabled && !target.autoGrow) {
         return false;
     }
     var localPoint = controlsUtils.getLocalPoint(transform, transform.originX, transform.originY, x, y);
-    var oldH = target.frameHeight;
     var newH = Math.max(Math.abs(localPoint.y), 0);
     // 拖 mt（上边缘）：下边缘锚定；拖 mb（下边缘）：上边缘即 origin 点，天然锚定
     var anchor = transform.originY === 'bottom' ? target.translateToOriginPoint(target.getCenterPoint(), transform.originX, transform.originY) : null;
-    target.setFrameHeight(newH);
+    if (target.clipEnabled) {
+        var oldH = target.frameHeight;
+        target.setFrameHeight(newH);
+        if (anchor) {
+            target.setPositionByOrigin(anchor, transform.originX, transform.originY);
+        }
+        return oldH !== target.frameHeight;
+    }
+    // autoGrow 模式：拖拽设置最大高度（框高由 initDimensions 拉齐到上限）
+    var oldMaxH = Number(target.autoGrowMaxHeight) || 0;
+    var maxH = newH > 0 ? newH : null;
+    target.set({ autoGrowMaxHeight: maxH });
+    target.set('dirty', true);
+    target.initDimensions && target.initDimensions();
     if (anchor) {
         target.setPositionByOrigin(anchor, transform.originX, transform.originY);
     }
-    return oldH !== target.frameHeight;
+    return oldMaxH !== (Number(maxH) || 0);
 }
 // 角点（tl/tr/bl/br）：自由修改宽度与高度
 function changeTextSize(eventData, transform, x, y) {
     var target = transform.target;
     var localPoint = controlsUtils.getLocalPoint(transform, transform.originX, transform.originY, x, y);
     var oldW = target.width;
-    var oldH = target.clipEnabled ? target.frameHeight || target.height : null;
     var newW = Math.max(Math.abs(localPoint.x), 0);
-    var newH = target.clipEnabled ? Math.max(Math.abs(localPoint.y), 0) : null;
+    var newH = Math.max(Math.abs(localPoint.y), 0);
 
     if (target.clipEnabled) {
+        var oldH = target.frameHeight || target.height;
         // 对角固定：先记录锚点（画布坐标），改尺寸后恢复该点
         var anchor = target.translateToOriginPoint(target.getCenterPoint(), transform.originX, transform.originY);
         target.set('width', newW);
         target.setFrameHeight(newH);
         target.setPositionByOrigin(anchor, transform.originX, transform.originY);
+        return oldW !== target.width || oldH !== target.frameHeight;
     }
-    else {
-        // 自动高度：顶部恒固定（Y 不漂移），高度向下生长，仅改宽度；旋转感知
+    if (target.autoGrow) {
+        // 自增高：改宽度 + 设置 maxHeight（框高由 initDimensions 拉齐到上限）
+        var oldMaxH = Number(target.autoGrowMaxHeight) || 0;
         var ox = transform.originX === 'right' ? 'right' : 'left';
         var anchor = target.translateToOriginPoint(target.getCenterPoint(), ox, 'top');
         target.set('width', newW);
+        target.set({ autoGrowMaxHeight: newH > 0 ? newH : null });
+        target.set('dirty', true);
+        target.initDimensions && target.initDimensions();
         target.setPositionByOrigin(anchor, ox, 'top');
+        return oldW !== target.width || oldMaxH !== (Number(target.autoGrowMaxHeight) || 0);
     }
+    // 无尺寸锁无自增高：顶部恒固定（Y 不漂移），仅改宽度；旋转感知
+    var ox = transform.originX === 'right' ? 'right' : 'left';
+    var anchor = target.translateToOriginPoint(target.getCenterPoint(), ox, 'top');
+    target.set('width', newW);
+    target.setPositionByOrigin(anchor, ox, 'top');
     return true;
 }
 
@@ -78,13 +101,13 @@ function makeTextControls() {
     controls.mr = new fabric.Control({ x: 0.5, y: 0, cursorStyleHandler: scaleSkewCursor, actionHandler: cw, actionName: 'resizing' });
     controls.mt = new fabric.Control({ x: 0, y: -0.5, cursorStyleHandler: scaleSkewCursor, actionHandler: ch, actionName: 'resizing' });
     controls.mb = new fabric.Control({ x: 0, y: 0.5, cursorStyleHandler: scaleSkewCursor, actionHandler: ch, actionName: 'resizing' });
-    // mt/mb 可见性始终由 clipEnabled 派生（尺寸锁关闭=高度自适应，隐藏上下手柄）
+    // mt/mb 可见性：尺寸锁或自增高时显示（自增高拖拽设置 maxHeight）
     // 覆盖 Control.getVisibility，避免依赖 selection 事件设置 _controlsVisibility
     controls.mt.getVisibility = function (object) {
-        return !!object.clipEnabled;
+        return !!object.clipEnabled || !!object.autoGrow;
     };
     controls.mb.getVisibility = function (object) {
-        return !!object.clipEnabled;
+        return !!object.clipEnabled || !!object.autoGrow;
     };
     controls.tl = new fabric.Control({ x: -0.5, y: -0.5, cursorStyleHandler: scaleCursor, actionHandler: cs, actionName: 'resizing' });
     controls.tr = new fabric.Control({ x: 0.5, y: -0.5, cursorStyleHandler: scaleCursor, actionHandler: cs, actionName: 'resizing' });
@@ -102,6 +125,12 @@ fabric.Textbox = fabric.util.createClass(fabric.Textbox, {
     ellipsisEnabled: false,
     // 尺寸锁开启时的框高度（height 由内容自适应，frame 高度存于此）
     frameHeight: null,
+    // 自适应增高：关闭尺寸锁时，文本块随内容增长（海报高度联动）
+    autoGrow: false,
+    // 自适应增高最小高度（null/0 = 不限制）
+    autoGrowMinHeight: null,
+    // 自适应增高最大高度（null/0 = 不限制）
+    autoGrowMaxHeight: null,
     // 自定义控制手柄：直接改 width/frameHeight
     controls: makeTextControls(),
 
@@ -111,13 +140,17 @@ fabric.Textbox = fabric.util.createClass(fabric.Textbox, {
         if (this.clipEnabled && this.frameHeight) {
             this.height = this.frameHeight;
         }
+        // 互斥初始化：尺寸锁开启时不允许自适应增高（autoGrow 仅尺寸锁关闭时生效）
+        if (this.clipEnabled) {
+            this.autoGrow = false;
+        }
         // 仅编辑态展示完整文本布局（跳过省略号），保证光标与选中定位基于完整文本；
         // 选中但不编辑仍显示省略号；退出编辑 / 取消选中后恢复截断
         this._ellipsisSuspended = false;
         this._pendingEdit = false;
         var self = this;
         this.on('deselected', function () {
-            if (self.clipEnabled && self.ellipsisEnabled && !self.isEditing) {
+            if (self._ellipsisCapable() && !self.isEditing) {
                 self._pendingEdit = false;
                 self.initDimensions();
                 self.set('dirty', true);
@@ -134,7 +167,7 @@ fabric.Textbox = fabric.util.createClass(fabric.Textbox, {
     },
     // 点击已选中文本正文（即将进入编辑）时，先用完整布局计算光标位置，再立即恢复截断
     setCursorByClick: function (e) {
-        var pend = !this.isEditing && this.clipEnabled && this.ellipsisEnabled && !this.__corner;
+        var pend = !this.isEditing && this._ellipsisCapable() && !this.__corner;
         if (pend) {
             this._pendingEdit = true;
             this.initDimensions();
@@ -151,7 +184,7 @@ fabric.Textbox = fabric.util.createClass(fabric.Textbox, {
     enterEditing: function (e) {
         var wasEditing = this.isEditing;
         var ret = this.callSuper('enterEditing', e);
-        if (!wasEditing && this.clipEnabled && this.ellipsisEnabled) {
+        if (!wasEditing && this._ellipsisCapable()) {
             this._pendingEdit = false;
             this.initDimensions();
             this.set('dirty', true);
@@ -161,7 +194,7 @@ fabric.Textbox = fabric.util.createClass(fabric.Textbox, {
     },
     exitEditing: function () {
         var ret = this.callSuper('exitEditing');
-        if (this.clipEnabled && this.ellipsisEnabled) {
+        if (this._ellipsisCapable()) {
             this._pendingEdit = false;
             this.initDimensions();
             this.set('dirty', true);
@@ -170,9 +203,11 @@ fabric.Textbox = fabric.util.createClass(fabric.Textbox, {
         return ret;
     },
 
-    // 尺寸锁：在本地坐标系裁剪到 [±w/2, ±h/2]（文本渲染同空间），避免 fabric clipPath 缓存错位
+    // 尺寸锁 / 自增高限高时：在本地坐标系裁剪到 [±w/2, ±h/2]
     _render: function (ctx) {
-        if (this.clipEnabled && this.height) {
+        var needsClip = this.clipEnabled ||
+            (this.autoGrow && (this.autoGrowMinHeight || this.autoGrowMaxHeight));
+        if (needsClip && this.height) {
             ctx.save();
             ctx.beginPath();
             ctx.rect(-this.width / 2, -this.height / 2, this.width, this.height);
@@ -266,11 +301,25 @@ fabric.Textbox = fabric.util.createClass(fabric.Textbox, {
             }
         }
     },
-    // 重新计算尺寸后恢复 frame 高度并应用省略号截断
+    // 重新计算尺寸后恢复 frame 高度、应用自增高钳制并应用省略号截断
     initDimensions: function () {
         this.callSuper('initDimensions');
         if (this.clipEnabled && this.frameHeight) {
             this.height = this.frameHeight;
+        }
+        // 自适应增高：设置最大高度后，对象/选中框高恒定等于该上限（等价 clip 的 frame 语义：
+        // 内容更矮时顶部锚定、框下留白；内容更高时裁剪到框内）。如此任何更新路径（改宽、改
+        // 最小/最大高度、省略号开关、输入框改值）initDimensions 都会把框高拉回上限，稳固不回落。
+        // 未设上限时随内容增高，且不低于最小高度（最小高度同上限框语义：内容更矮则抬升框高）。
+        if (this.autoGrow && !this.clipEnabled) {
+            var minH = Number(this.autoGrowMinHeight) || 0;
+            var maxH = Number(this.autoGrowMaxHeight) || 0;
+            if (maxH > 0) {
+                this.height = maxH;
+            }
+            else if (minH > 0 && this.height < minH) {
+                this.height = minH;
+            }
         }
         // 编辑/选中态跳过省略号（光标与选中定位需基于完整文本），其余状态实时恢复截断
         this._refreshEllipsisState();
@@ -368,11 +417,18 @@ fabric.Textbox = fabric.util.createClass(fabric.Textbox, {
         return graphemeLines;
     },
     // 依据 frame 高度，只保留能完整显示的行，并在最后一行截断追加 "..."
+    // 省略号可用条件：尺寸锁+框高，或自增高+最大高度
+    _ellipsisCapable: function () {
+        return this.ellipsisEnabled && (
+            (this.clipEnabled && this.frameHeight) ||
+            (this.autoGrow && this.autoGrowMaxHeight)
+        );
+    },
     _applyEllipsis: function () {
-        if (!this.clipEnabled || !this.ellipsisEnabled || !this.frameHeight) {
+        if (!this._ellipsisCapable()) {
             return;
         }
-        var frameH = this.frameHeight;
+        var frameH = this.clipEnabled ? this.frameHeight : this.height;
         if (!this.height || !frameH) {
             return;
         }
@@ -454,7 +510,7 @@ fabric.Textbox = fabric.util.createClass(fabric.Textbox, {
         this.set('dirty', true);
     },
     toObject: function (propertiesToInclude) {
-        return this.callSuper('toObject', ['clipEnabled', 'ellipsisEnabled', 'frameHeight'].concat(propertiesToInclude));
+        return this.callSuper('toObject', ['clipEnabled', 'ellipsisEnabled', 'frameHeight', 'autoGrow', 'autoGrowMinHeight', 'autoGrowMaxHeight'].concat(propertiesToInclude));
     },
 });
 fabric.Textbox.fromObject = function (options, callback) {
