@@ -1,0 +1,174 @@
+{
+  "bgSeting": {
+    "size": "尺寸",
+    "color": "颜色",
+    "colorMacthing": "配色",
+    "width": "宽度",
+    "height": "高度"
+  },
+  "sizeSetting": {
+  },
+  "flip": {
+    "x": "水平翻转",
+    "y": "垂直翻转"
+  },
+  "attrSeting": {
+    "group": "成组",
+    "unGroup": "拆分组",
+    "flip": {
+      "name": "翻转",
+      "x": "水平翻转",
+      "y": "垂直翻转"
+    },
+    "align": {
+      "name": "对齐",
+      "left": "左对齐",
+      "centerX": "水平居中对齐",
+      "right": "右对齐",
+      "top": "上对齐",
+      "bottom": "下对齐",
+      "centerY": "垂直居中对齐",
+      "averageX": "水平分布",
+      "averageY": "垂直分布"
+    },
+    "centerAlign": {
+      "name": "居中",
+      "centerX": "水平居中",
+      "center": "水平垂直居中",
+      "centerY": "垂直居中"
+    }
+  },
+  "color": "颜色",
+  "textFloat": "小数",
+  "text_content": "文本内容",
+  "elements": "添加",
+  "background": "背景",
+  "common_elements": "基础要素",
+  "textTool": {
+    "text": "文本",
+    "textBox": "文本框",
+  },
+  "draw_elements": "绘制元素",
+  "code_img": "条码图片",
+  "advance_elements": "高级",
+  "preview": "预览",
+  "save": {
+    "empty": "清空",
+    "down": "下载",
+    "save_as_picture": "PNG图片",
+    "copy_to_clipboard": "复制到剪切板",
+    "save_as_json": "保存为JSON"
+  },
+  "layers": "图层",
+  "importFiles": {
+    "file": "文件",
+    "createDesign": {
+      "title": "创建设计",
+      "customSize": "自定义尺寸",
+      "systemSize": "系统推荐尺寸",
+      "width": "宽度",
+      "height": "高度",
+      "create": "确定"
+    },
+    "importFiles": "从 JSON文件 导入",
+    "importJsonStr": "从 JSON字符串 导入",
+    "importJsonStrPlaceholder": "请输入JSON字符串",
+    "importJsonStrError": "JSON格式不正确，请检查后重试",
+    "importJsonStrSuccess": "导入成功"
+  },
+  "repleaceImg": "替换图片",
+  "cropperImg": "裁剪图片",
+  "editClip": "编辑裁切",
+  "exitClip": "退出裁切",
+  "clipInfo": "裁切区域",
+  "createClip": "添加裁切",
+  "removeClip": "移除裁切",
+  "polygonClip": "多边形",
+  "rectClip": "矩形",
+  "circleClip": "圆",
+  "triangleClip": "三角形",
+  "polygonClipInverted": "多边形【反】",
+  "rectClipInverted": "矩形【反】",
+  "circleClipInverted": "圆【反】",
+  "triangleClipInverted": "三角形【反】",
+  "filters": {
+    "simple": "简单滤镜",
+    "complex": "复杂滤镜",
+    "Invert": "反向",
+    "Sepia": "乌黑",
+    "BlackWhite": "黑白",
+    "Brownie": "巧克力",
+    "Vintage": "复古",
+    "Kodachrome": "胶片",
+    "technicolor": "鲜艳",
+    "Polaroid": "高光",
+    "Grayscale": "灰度",
+    "GrayscaleList": {
+      "average": "一般",
+      "lightness": "中度",
+      "luminosity": "明亮"
+    },
+    "RemoveColor": "去除颜色",
+    "Brightness": "亮度",
+    "Contrast": "对比度",
+    "Saturation": "饱和度",
+    "Vibrance": "振动",
+    "HueRotation": "色调",
+    "Noise": "噪音",
+    "Pixelate": "像素化",
+    "Blur": "模糊",
+    "Gamma": "调整"
+  },
+  "quick": {
+    "del": "删除",
+    "copy": "复制",
+    "lock": "锁定",
+    "unlock": "解锁",
+    "hide": "隐藏",
+    "show": "显示",
+    "editPoly": "编辑多边形"
+  },
+  "insertFile": {
+    "insert": "插入",
+    "insert_picture": "插入图片",
+    "insert_picture_label": "图片",
+    "insert_SVG": "插入SVG元素",
+    "insert_SVG_label": "SVG",
+    "insert_SVGStr": "插入SVG字符",
+    "insert_SVGStr_label": "SVG代码",
+    "insert_JSON": "插入Fabric JSON",
+    "insert_SVGStr_placeholder": "请输入SVG字符串",
+    "insert_JSON_placeholder": "请输入Fabric元素JSON代码",
+    "insert_JSON_error": "JSON格式不正确，请检查后重试",
+    "modal_tittle": "请输入"
+  },
+  "history": {
+    "revocation": "撤销",
+    "redo": "重做"
+  },
+  "attributes": {
+    "id": "标识",
+    "stroke": "边框",
+    "line_height": "行高",
+    "char_spacing": "间距",
+    "exterior": "外观",
+    "angle": "旋转",
+    "left": "X轴",
+    "top": "Y轴",
+    "opacity": "透明",
+    "blur": "模糊",
+    "offset_x": "X轴",
+    "offset_y": "Y轴",
+    "rx_ry": "半径",
+    "blendModes": {
+    }
+  },
+  "setSizeTip": "调整画布尺寸",
+  "tip": "提示",
+  "clearTip": "确定要清空吗？",
+  "ok": "确认",
+  "cancel": "取消",
+  "cleanUp": "清除",
+  "variable": {
+  }
+}

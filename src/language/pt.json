@@ -1,0 +1,174 @@
+{
+  "bgSeting": {
+    "size": "Tamanho",
+    "color": "Cor",
+    "colorMacthing": "Combinação de cores",
+    "width": "Largura",
+    "height": "Altura"
+  },
+  "sizeSetting": {
+  },
+  "flip": {
+    "x": "Inverter horizontalmente",
+    "y": "Inverter verticalmente"
+  },
+  "attrSeting": {
+    "group": "Agrupar",
+    "unGroup": "Desagrupar",
+    "flip": {
+      "name": "Inverter",
+      "x": "Inverter horizontalmente",
+      "y": "Inverter verticalmente"
+    },
+    "align": {
+      "name": "Alinhar",
+      "left": "Alinhar à esquerda",
+      "centerX": "Centralizar horizontalmente",
+      "right": "Alinhar à direita",
+      "top": "Alinhar ao topo",
+      "bottom": "Alinhar ao fundo",
+      "centerY": "Centralizar verticalmente",
+      "averageX": "Distribuir horizontalmente",
+      "averageY": "Distribuir verticalmente"
+    },
+    "centerAlign": {
+      "name": "Centralizar",
+      "centerX": "Centralizar horizontalmente",
+      "center": "Centralizar ambos",
+      "centerY": "Centralizar verticalmente"
+    }
+  },
+  "color": "Cor",
+  "textFloat": "Decimal",
+  "text_content": "Conteúdo do texto",
+  "elements": "Adicionar",
+  "background": "Fundo",
+  "common_elements": "Elementos comuns",
+  "textTool": {
+    "text": "Texto",
+    "textBox": "Caixa de texto",
+  },
+  "draw_elements": "Elementos arrastre",
+  "code_img": "Imagem de código",
+  "advance_elements": "Avançado",
+  "preview": "Antevisão",
+  "save": {
+    "empty": "Limpar",
+    "down": "Baixar",
+    "save_as_picture": "Imagem PNG",
+    "copy_to_clipboard": "Copiar para a área de transferência",
+    "save_as_json": "Salvar como JSON"
+  },
+  "layers": "Camadas",
+  "importFiles": {
+    "file": "Arquivo",
+    "createDesign": {
+      "title": "Criar Design",
+      "customSize": "Tamanho personalizado",
+      "systemSize": "Tamanho recomendado",
+      "width": "Largura",
+      "height": "Altura",
+      "create": "OK"
+    },
+    "importFiles": "Importar do arquivo JSON",
+    "importJsonStr": "Importar de string JSON",
+    "importJsonStrPlaceholder": "Insira a string JSON",
+    "importJsonStrError": "Formato JSON inválido, verifique e tente novamente",
+    "importJsonStrSuccess": "Importado com sucesso"
+  },
+  "repleaceImg": "Substituir imagem",
+  "cropperImg": "Recortar imagem",
+  "editClip": "Editar recorte",
+  "exitClip": "Sair do recorte",
+  "clipInfo": "Área de recorte",
+  "createClip": "Adicionar recorte",
+  "removeClip": "Remover recorte",
+  "polygonClip": "Polígono",
+  "rectClip": "Retângulo",
+  "circleClip": "Círculo",
+  "triangleClip": "Triângulo",
+  "polygonClipInverted": "Polígono (invertido)",
+  "rectClipInverted": "Retângulo (invertido)",
+  "circleClipInverted": "Círculo (invertido)",
+  "triangleClipInverted": "Triângulo (invertido)",
+  "filters": {
+    "simple": "Filtro simples",
+    "complex": "Filtro complexo",
+    "Invert": "Inverter",
+    "Sepia": "Sépia",
+    "BlackWhite": "Preto e branco",
+    "Brownie": "Brownie",
+    "Vintage": "Vintage",
+    "Kodachrome": "Kodachrome",
+    "technicolor": "Technicolor",
+    "Polaroid": "Polaroid",
+    "Grayscale": "Tons de cinza",
+    "GrayscaleList": {
+      "average": "médio",
+      "lightness": "leve",
+      "luminosity": "luminosidade"
+    },
+    "RemoveColor": "Remover cor",
+    "Brightness": "Brilho",
+    "Contrast": "Contraste",
+    "Saturation": "Saturação",
+    "Vibrance": "Vibração",
+    "HueRotation": "Rotação de matiz",
+    "Noise": "Ruído",
+    "Pixelate": "Pixelizar",
+    "Blur": "Desfoque",
+    "Gamma": "Gama"
+  },
+  "quick": {
+    "del": "Eliminar",
+    "copy": "Copiar",
+    "lock": "Bloquear",
+    "unlock": "Desbloquear",
+    "hide": "Ocultar",
+    "show": "Mostrar",
+    "editPoly": "Editar polígono"
+  },
+  "insertFile": {
+    "insert": "insert",
+    "insert_picture": "Insert picture",
+    "insert_picture_label": "Imagem",
+    "insert_SVG": "Insert SVG",
+    "insert_SVG_label": "SVG",
+    "insert_SVGStr": "Insert SVG String",
+    "insert_SVGStr_label": "Código SVG",
+    "insert_JSON": "Inserir JSON do Fabric",
+    "insert_SVGStr_placeholder": "Please enter SVG String",
+    "insert_JSON_placeholder": "Insira o código JSON do elemento Fabric",
+    "insert_JSON_error": "Formato JSON inválido, verifique e tente novamente",
+    "modal_tittle": "Please enter"
+  },
+  "history": {
+    "revocation": "Desfazer",
+    "redo": "Refazer"
+  },
+  "attributes": {
+    "id": "ID",
+    "stroke": "Stroke:",
+    "line_height": "Line height",
+    "char_spacing": "Espaço Char.",
+    "exterior": "Exterior",
+    "angle": "Ângulo",
+    "left": "Esq",
+    "top": "Topo",
+    "opacity": "Transparência",
+    "blur": "Blur",
+    "offset_x": "X",
+    "offset_y": "Y",
+    "rx_ry": "Rounded",
+    "blendModes": {
+    }
+  },
+  "setSizeTip": "Redimensionar tela",
+  "tip": "Dica",
+  "clearTip": "Tem certeza de que deseja limpar?",
+  "ok": "OK",
+  "cancel": "Cancelar",
+  "cleanUp": "Limpar",
+  "variable": {
+  }
+}

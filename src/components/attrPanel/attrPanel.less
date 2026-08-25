@@ -1,0 +1,22 @@
+// 属性面板通用样式，由各属性组件在 <style lang="less" scoped> 顶部引入
+// 收敛此前散落在各文件中的相同 /deep/ 规则
+
+// 数字输入框 / 颜色选择器全宽
+/deep/ .ivu-input-number {
+  display: block;
+  width: 100%;
+}
+
+/deep/ .ivu-color-picker {
+  display: block;
+}
+
+// 分组标题
+/deep/ .ivu-divider-plain {
+  &.ivu-divider-with-text-left {
+    margin: 10px 0;
+    font-weight: bold;
+    font-size: 16px;
+    color: #000000;
+  }
+}

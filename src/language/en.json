@@ -1,0 +1,174 @@
+{
+  "bgSeting": {
+    "size": "Size",
+    "color": "Color",
+    "colorMacthing": "Color match",
+    "width": "Width",
+    "height": "Height"
+  },
+  "sizeSetting": {
+  },
+  "flip": {
+    "x": "flip x",
+    "y": "flip y"
+  },
+  "attrSeting": {
+    "group": "Group",
+    "unGroup": "Ungroup",
+    "flip": {
+      "name": "Flip",
+      "x": "Flip horizontal",
+      "y": "Flip vertical"
+    },
+    "align": {
+      "name": "Align",
+      "left": "Align left",
+      "centerX": "Center horizontally",
+      "right": "Align right",
+      "top": "Align top",
+      "bottom": "Align bottom",
+      "centerY": "Center vertically",
+      "averageX": "Distribute horizontally",
+      "averageY": "Distribute vertically"
+    },
+    "centerAlign": {
+      "name": "Center",
+      "centerX": "Center horizontally",
+      "center": "Center both",
+      "centerY": "Center vertically"
+    }
+  },
+  "color": "Color",
+  "textFloat": "Decimal",
+  "text_content": "Text Content",
+  "elements": "Add",
+  "background": "Background",
+  "common_elements": "Common Elements",
+  "textTool": {
+    "text": "Text",
+    "textBox": "Text Box",
+  },
+  "draw_elements": "Draw Elements",
+  "code_img": "Code Img",
+  "advance_elements": "Advanced",
+  "preview": "Preview",
+  "save": {
+    "empty": "Clear",
+    "down": "Download",
+    "save_as_picture": "PNG image",
+    "copy_to_clipboard": "Copy to clipboard",
+    "save_as_json": "Save as JSON"
+  },
+  "layers": "Layers",
+  "importFiles": {
+    "file": "File",
+    "createDesign": {
+      "title": "Create Design",
+      "customSize": "Custom Size",
+      "systemSize": "System Recommended Size",
+      "width": "Width",
+      "height": "Height",
+      "create": "OK"
+    },
+    "importFiles": "Import from JSON file",
+    "importJsonStr": "Import from JSON string",
+    "importJsonStrPlaceholder": "Please enter JSON string",
+    "importJsonStrError": "Invalid JSON format, please check and retry",
+    "importJsonStrSuccess": "Imported successfully"
+  },
+  "repleaceImg": "Replace Image",
+  "cropperImg": "Crop image",
+  "editClip": "Edit clip",
+  "exitClip": "Exit crop",
+  "clipInfo": "Crop area",
+  "createClip": "Add clip",
+  "removeClip": "Remove clip",
+  "polygonClip": "Polygon",
+  "rectClip": "Rectangle",
+  "circleClip": "Circle",
+  "triangleClip": "Triangle",
+  "polygonClipInverted": "Polygon (inverted)",
+  "rectClipInverted": "Rectangle (inverted)",
+  "circleClipInverted": "Circle (inverted)",
+  "triangleClipInverted": "Triangle (inverted)",
+  "filters": {
+    "simple": "Simple Filter",
+    "complex": "Complex Filter",
+    "Invert": "Invert",
+    "Sepia": "Sepia",
+    "BlackWhite": "BlackWhite",
+    "Brownie": "Brownie",
+    "Vintage": "Vintage",
+    "Kodachrome": "Kodachrome",
+    "technicolor": "Technicolor",
+    "Polaroid": "Polaroid",
+    "Grayscale": "Grayscale",
+    "GrayscaleList": {
+      "average": "average",
+      "lightness": "lightness",
+      "luminosity": "luminosity"
+    },
+    "RemoveColor": "Remove Color",
+    "Brightness": "Brightness",
+    "Contrast": "Contrast",
+    "Saturation": "Saturation",
+    "Vibrance": "Vibrance",
+    "HueRotation": "Hue Rotation",
+    "Noise": "Noise",
+    "Pixelate": "Pixelate",
+    "Blur": "Blur",
+    "Gamma": "Gamma"
+  },
+  "quick": {
+    "del": "Delete",
+    "copy": "Copy",
+    "lock": "Lock",
+    "unlock": "Unlock",
+    "hide": "Hide",
+    "show": "Show",
+    "editPoly": "Edit polygon"
+  },
+  "insertFile": {
+    "insert": "insert",
+    "insert_picture": "Insert picture",
+    "insert_picture_label": "Picture",
+    "insert_SVG": "Insert SVG",
+    "insert_SVG_label": "SVG",
+    "insert_SVGStr": "Insert SVG String",
+    "insert_SVGStr_label": "SVG Code",
+    "insert_JSON": "Insert Fabric JSON",
+    "insert_SVGStr_placeholder": "Please enter SVG String",
+    "insert_JSON_placeholder": "Please enter Fabric element JSON code",
+    "insert_JSON_error": "Invalid JSON format, please check and retry",
+    "modal_tittle": "Please enter"
+  },
+  "history": {
+    "revocation": "Undo",
+    "redo": "Redo"
+  },
+  "attributes": {
+    "id": "ID",
+    "stroke": "Stroke:",
+    "line_height": "Line height",
+    "char_spacing": "Spacing",
+    "exterior": "Exterior",
+    "angle": "Angle",
+    "left": "Left",
+    "top": "Top",
+    "opacity": "Opacity",
+    "blur": "Blur",
+    "offset_x": "X",
+    "offset_y": "Y",
+    "rx_ry": "Rounded",
+    "blendModes": {
+    }
+  },
+  "setSizeTip": "Resize canvas",
+  "tip": "Tip",
+  "clearTip": "Are you sure you want to clear it?",
+  "ok": "OK",
+  "cancel": "Cancel",
+  "cleanUp": "Clean up",
+  "variable": {
+  }
+}
