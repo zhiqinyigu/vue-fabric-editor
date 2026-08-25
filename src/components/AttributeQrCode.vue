@@ -34,7 +34,13 @@
 
       <AttrMultiField>
         <AttrField bare label="散点">
-          <ColorPicker v-model="baseAttr.dotsColor" alpha @on-change="changeCommon" />
+          <ColorPalettePicker
+            :value.sync="baseAttr.dotsColor"
+            :show-input="false"
+            :color-modes="['monochrome']"
+            format="RGB"
+            @change="changeCommon"
+          />
         </AttrField>
         <AttrField bare>
           <template #label>
@@ -50,7 +56,13 @@
 
       <AttrMultiField>
         <AttrField bare label="外角">
-          <ColorPicker v-model="baseAttr.cornersSquareColor" alpha @on-change="changeCommon" />
+          <ColorPalettePicker
+            :value.sync="baseAttr.cornersSquareColor"
+            :show-input="false"
+            :color-modes="['monochrome']"
+            format="RGB"
+            @change="changeCommon"
+          />
         </AttrField>
         <AttrField bare>
           <template #label>
@@ -69,7 +81,13 @@
       </AttrMultiField>
       <AttrMultiField>
         <AttrField bare label="内角">
-          <ColorPicker v-model="baseAttr.cornersDotColor" alpha @on-change="changeCommon" />
+          <ColorPalettePicker
+            :value.sync="baseAttr.cornersDotColor"
+            :show-input="false"
+            :color-modes="['monochrome']"
+            format="RGB"
+            @change="changeCommon"
+          />
         </AttrField>
         <AttrField bare>
           <template #label>
@@ -85,7 +103,13 @@
 
       <AttrMultiField>
         <AttrField bare label="背景">
-          <ColorPicker v-model="baseAttr.background" alpha @on-change="changeCommon" />
+          <ColorPalettePicker
+            :value.sync="baseAttr.background"
+            :show-input="false"
+            :color-modes="['monochrome']"
+            format="RGB"
+            @change="changeCommon"
+          />
         </AttrField>
         <AttrField bare>
           <template #label>
@@ -121,6 +145,7 @@ import InputNumber from '@/components/inputNumber';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import AttrField from '@/components/attrPanel/AttrField.vue';
 import AttrMultiField from '@/components/attrPanel/AttrMultiField.vue';
+import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
 
 export default {
   name: 'AttrBute',
@@ -129,6 +154,7 @@ export default {
     AttrSection,
     AttrField,
     AttrMultiField,
+    ColorPalettePicker,
   },
   setup() {
     const update = getCurrentInstance();

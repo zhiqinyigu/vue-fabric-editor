@@ -62,11 +62,12 @@
                     ></Slider>
                   </div>
                   <div v-if="info.uiType === uiType.COLOR">
-                    <ColorPicker
-                      v-model="info.value"
-                      alpha
-                      size="small"
-                      @on-change="changeFiltersByParams(item.type)"
+                    <ColorPalettePicker
+                      :value.sync="info.value"
+                      :show-input="false"
+                      :color-modes="['monochrome']"
+                      format="RGB"
+                      @change="changeFiltersByParams(item.type)"
                     />
                   </div>
                 </div>
@@ -84,11 +85,13 @@ import { reactive, getCurrentInstance, onMounted, onBeforeUnmount } from '@vue/c
 import useSelect from '@/hooks/select';
 import { uiType, paramsFilters, combinationFilters } from '@/config/constants/filter';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
+import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
 
 export default {
   name: 'ImageFilters',
   components: {
     AttrSection,
+    ColorPalettePicker,
   },
   setup() {
     const { fabric, isOne, canvasEditor } = useSelect();

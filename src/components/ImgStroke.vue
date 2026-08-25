@@ -19,8 +19,13 @@
         <AttrField bare label="描边大小" label-width="5em">
           <Slider v-model="strokeWidth" :max="50" @on-input="onSliderChange"></Slider>
         </AttrField>
-        <AttrField split bare label="描边颜色">
-          <ColorPicker v-model="strokeColor" placement="left" @on-change="onColorChange" />
+        <AttrField bare label="描边颜色">
+          <ColorPalettePicker
+            :value.sync="strokeColor"
+            :color-modes="['monochrome']"
+            format="RGB"
+            @change="onColorChange"
+          />
         </AttrField>
       </template>
     </AttrGroup>
@@ -34,6 +39,7 @@ import { Utils } from '@/core/index';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import AttrField from '@/components/attrPanel/AttrField.vue';
 import AttrGroup from '@/components/attrPanel/AttrGroup.vue';
+import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
 
 export default {
   name: 'ImgStroke',
@@ -41,6 +47,7 @@ export default {
     AttrSection,
     AttrField,
     AttrGroup,
+    ColorPalettePicker,
   },
   setup() {
     const { isOne, canvasEditor } = useSelect();

@@ -104,10 +104,11 @@
       </AttrMultiField>
 
       <AttrField :label="$t('background')">
-        <ColorPicker
-          v-model="baseAttr.textBackgroundColor"
-          alpha
-          @on-change="(value) => changeCommon('textBackgroundColor', value)"
+        <ColorPalettePicker
+          :value.sync="baseAttr.textBackgroundColor"
+          :color-modes="['monochrome']"
+          format="RGB"
+          @change="(value) => changeCommon('textBackgroundColor', value)"
         />
       </AttrField>
     </div>
@@ -128,6 +129,7 @@ import InputNumber from '@/components/inputNumber';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import AttrField from '@/components/attrPanel/AttrField.vue';
 import AttrMultiField from '@/components/attrPanel/AttrMultiField.vue';
+import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
 import FontWeight from '@/assets/icon/attribute/fontWeight.svg';
 import FontStyle from '@/assets/icon/attribute/fontStyle.svg';
 import Linethrough from '@/assets/icon/attribute/linethrough.svg';
@@ -145,6 +147,7 @@ export default {
     AttrSection,
     AttrField,
     AttrMultiField,
+    ColorPalettePicker,
     FontWeight,
     FontStyle,
     Linethrough,

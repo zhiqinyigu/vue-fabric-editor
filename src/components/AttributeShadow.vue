@@ -12,7 +12,13 @@
     <div>
       <AttrMultiField :gutter="10" no-background>
         <AttrField :label="$t('color')">
-          <ColorPicker v-model="baseAttr.shadow.color" alpha @on-change="changeCommon" />
+          <ColorPalettePicker
+            :value.sync="baseAttr.shadow.color"
+            :show-input="false"
+            :color-modes="['monochrome']"
+            format="RGB"
+            @change="changeCommon"
+          />
         </AttrField>
         <AttrField>
           <InputNumber
@@ -53,6 +59,7 @@ import InputNumber from '@/components/inputNumber';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import AttrField from '@/components/attrPanel/AttrField.vue';
 import AttrMultiField from '@/components/attrPanel/AttrMultiField.vue';
+import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
 
 export default {
   name: 'AttrBute',
@@ -61,6 +68,7 @@ export default {
     AttrSection,
     AttrField,
     AttrMultiField,
+    ColorPalettePicker,
   },
   setup() {
     const update = getCurrentInstance();

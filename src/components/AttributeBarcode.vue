@@ -46,7 +46,13 @@
 
       <AttrMultiField>
         <AttrField bare label="条码">
-          <ColorPicker v-model="baseAttr.lineColor" alpha @on-change="changeCommon" />
+          <ColorPalettePicker
+            :value.sync="baseAttr.lineColor"
+            :show-input="false"
+            :color-modes="['monochrome']"
+            format="RGB"
+            @change="changeCommon"
+          />
         </AttrField>
         <AttrField v-if="baseAttr.displayValue" bare>
           <InputNumber
@@ -60,7 +66,13 @@
 
       <AttrMultiField>
         <AttrField bare label="背景">
-          <ColorPicker v-model="baseAttr.background" alpha @on-change="changeCommon" />
+          <ColorPalettePicker
+            :value.sync="baseAttr.background"
+            :show-input="false"
+            :color-modes="['monochrome']"
+            format="RGB"
+            @change="changeCommon"
+          />
         </AttrField>
         <AttrField bare>
           <template #label>
@@ -93,6 +105,7 @@ import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import AttrField from '@/components/attrPanel/AttrField.vue';
 import AttrMultiField from '@/components/attrPanel/AttrMultiField.vue';
 import AttrGroup from '@/components/attrPanel/AttrGroup.vue';
+import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
 
 import left from '!!raw-loader!@/assets/icon/barcode/left.svg';
 import right from '!!raw-loader!@/assets/icon/barcode/right.svg';
@@ -106,6 +119,7 @@ export default {
     AttrField,
     AttrMultiField,
     AttrGroup,
+    ColorPalettePicker,
   },
   setup() {
     const update = getCurrentInstance();

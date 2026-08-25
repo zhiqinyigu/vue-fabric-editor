@@ -2,18 +2,7 @@
   <div v-if="!isSelect">
     <AttrSection :title="$t('bgSeting.color')">
       <div class="bg-item">
-        <Tooltip class="color-control" placement="top" theme="light">
-          <div class="color-bar" :style="{ background: color }"></div>
-          <template #content>
-            <ColorPicker
-              :value="color"
-              :modes="['渐变', '纯色']"
-              @update:value="(val) => (color = val)"
-              @change="colorChange"
-              @native-pick="dropColor"
-            ></ColorPicker>
-          </template>
-        </Tooltip>
+        <ColorPalettePicker :value.sync="color" @change="applyBackgroundColor" />
       </div>
     </AttrSection>
     <AttrSection :title="$t('bgSeting.colorMacthing')">
@@ -89,18 +78,19 @@
 
 <script>
 // import workspaceMask from './workspaceMask.vue';
-import { ref, toRaw, onMounted, onUnmounted } from '@vue/composition-api';
+import { ref, onMounted, onUnmounted } from '@vue/composition-api';
 import useSelect from '@/hooks/select';
 import useImagePicker from '@/hooks/useImagePicker';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
-import ColorPicker from './color-picker';
+import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
+import { parseGradient } from '@/components/vue-color-palette-vue2';
 import { RGBA2HexA } from './color-picker/utils/color.js';
 
 export default {
   name: 'BgBar',
   components: {
     AttrSection,
-    ColorPicker,
+    ColorPalettePicker,
   },
   setup() {
     const { isSelect, canvasEditor, fabric } = useSelect();
@@ -219,6 +209,30 @@ export default {
         colorStops: [...stops],
       });
     };
+    // css转Fabric径向渐变（circle at x% y%，r2取圆心到最远角的距离铺满画布）
+    const cssToFabricRadialGradient = (stops, width, height, positionX, positionY) => {
+      const x1 = (positionX / 100) * width;
+      const y1 = (positionY / 100) * height;
+      const r2 = Math.max(
+        Math.hypot(x1, y1),
+        Math.hypot(width - x1, y1),
+        Math.hypot(x1, height - y1),
+        Math.hypot(width - x1, height - y1)
+      );
+      return new fabric.Gradient({
+        type: 'radial',
+        gradientUnits: 'pencentage',
+        coords: {
+          x1,
+          y1,
+          r1: 0,
+          x2: x1,
+          y2: y1,
+          r2,
+        },
+        colorStops: [...stops],
+      });
+    };
     // Fabric渐变转css
     const fabricGradientToCss = (val, workspace) => {
       if (!val) return '';
@@ -229,32 +243,38 @@ export default {
       );
       return `linear-gradient(${deg}deg, ${colorStops.join(', ')})`;
     };
-    // 背景颜色设置（color-picker：纯色/渐变）
-    const colorChange = (value) => {
+    // 背景颜色设置（新 picker 输出 css 字符串→应用到 workspace）
+    const applyBackgroundColor = (value) => {
       const workspace = getWorkspace();
       if (!workspace) return;
-      const colorStr = String(value.color).replace('NaN', '');
-      if (value.mode === '纯色') {
-        workspace.set('fill', colorStr);
-      } else if (value.mode === '渐变') {
-        const currentGradient = cssToFabricGradient(
-          toRaw(value.stops),
-          workspace.width,
-          workspace.height,
-          value.angle
-        );
-        workspace.set('fill', currentGradient);
-        workspace.set(angleKey, value.angle);
+      const gradient = parseGradient(value);
+      if (gradient) {
+        const stops = gradient.config.stops.map((stop) => ({
+          color: stop.color.toRgbString(),
+          offset: stop.percentage / 100,
+        }));
+        if (gradient.mode === 'radial-gradient') {
+          const radialGradient = cssToFabricRadialGradient(
+            stops,
+            workspace.width,
+            workspace.height,
+            gradient.config.positionX,
+            gradient.config.positionY
+          );
+          workspace.set('fill', radialGradient);
+        } else {
+          const currentGradient = cssToFabricGradient(
+            stops,
+            workspace.width,
+            workspace.height,
+            gradient.config.angle
+          );
+          workspace.set('fill', currentGradient);
+          workspace.set(angleKey, gradient.config.angle);
+        }
+      } else {
+        workspace.set('fill', String(value).replace('NaN', ''));
       }
-      canvasEditor.canvas.renderAll();
-    };
-    // 取色器（纯色模式下生效）
-    const dropColor = (value) => {
-      const workspace = getWorkspace();
-      if (!workspace || typeof value !== 'string') return;
-      if (String(color.value).startsWith('linear-gradient')) return;
-      workspace.set('fill', value);
-      color.value = value;
       canvasEditor.canvas.renderAll();
     };
 
@@ -267,6 +287,15 @@ export default {
         color.value = toHexA(fill);
       } else if (fill && fill.type === 'linear') {
         color.value = fabricGradientToCss(fill, workspace);
+      } else if (fill && fill.type === 'radial') {
+        // 从 coords 反推圆心百分比，回显为 css 径向渐变
+        const coords = fill.coords;
+        const px = Math.round((coords.x1 / workspace.width) * 100);
+        const py = Math.round((coords.y1 / workspace.height) * 100);
+        const colorStops = fill.colorStops.map(
+          (item) => `${item.color} ${Math.round(item.offset * 100)}%`
+        );
+        color.value = `radial-gradient(circle at ${px}% ${py}%, ${colorStops.join(', ')})`;
       }
       // 背景图回显
       const bgInfo = canvasEditor.getBackgroundImage();
@@ -304,8 +333,7 @@ export default {
       color,
       colorList,
       setColor,
-      colorChange,
-      dropColor,
+      applyBackgroundColor,
       bgImageUrl,
       bgMode,
       bgOpacity,

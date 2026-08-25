@@ -43,7 +43,11 @@
       <div class="setting-item">
         <span class="mr-10px">{{ $t('waterMark.setting.color') }}</span>
 
-        <ColorPicker v-model="waterMarkState.color" alpha size="small" />
+        <ColorPalettePicker
+          :value.sync="waterMarkState.color"
+          :color-modes="['monochrome']"
+          format="RGB"
+        />
       </div>
       <div class="setting-item">
         <span class="mr-10px">{{ $t('waterMark.setting.position.label') }}</span>
@@ -82,9 +86,13 @@ import { cloneDeep, debounce } from 'lodash-es';
 import useSelect from '@/hooks/select';
 // import { useFont } from '@/hooks';
 import { Message } from 'view-design';
+import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
 
 export default {
   name: 'WaterMark',
+  components: {
+    ColorPalettePicker,
+  },
   setup() {
     const POSITION = {
       lt: 'Left_Top',

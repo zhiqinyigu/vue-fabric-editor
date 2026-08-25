@@ -10,38 +10,22 @@
   <AttrSection v-if="isOne && selectType !== 'image' && selectType !== 'group'" title="颜色">
     <!-- 通用属性 -->
     <div class="bg-item">
-      <Tooltip class="color-control" placement="top" theme="light">
-        <div class="color-bar" :style="{ background: baseAttr.fill }"></div>
-        <template #content>
-          <ColorPicker
-            :value="baseAttr.fill"
-            :modes="['渐变', '纯色']"
-            @update:value="(val) => (baseAttr.fill = val)"
-            @change="colorChange"
-            @native-pick="dropColor"
-          ></ColorPicker>
-        </template>
-      </Tooltip>
+      <ColorPalettePicker :value.sync="baseAttr.fill" @change="applyColor" />
     </div>
   </AttrSection>
 </template>
 
 <script>
-import {
-  reactive,
-  toRaw,
-  getCurrentInstance,
-  onMounted,
-  onBeforeUnmount,
-} from '@vue/composition-api';
+import { reactive, getCurrentInstance, onMounted, onBeforeUnmount } from '@vue/composition-api';
 import useSelect from '@/hooks/select';
-import ColorPicker from './color-picker';
+import { parseGradient } from '@/components/vue-color-palette-vue2';
+import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 
 export default {
   name: 'AttrButeColor',
   components: {
-    ColorPicker,
+    ColorPalettePicker,
     AttrSection,
   },
   setup() {
@@ -68,28 +52,28 @@ export default {
       }
     };
 
-    const colorChange = (value) => {
+    // 新 picker 输出 css 字符串（纯色或无渐变/渐变）→ 应用到选中对象
+    const applyColor = (value) => {
       const activeObject = canvasEditor.canvas.getActiveObjects()[0];
-      if (activeObject) {
-        const color = String(value.color).replace('NaN', '');
-        if (value.mode === '纯色') {
-          activeObject.set('fill', color);
-        } else if (value.mode === '渐变') {
-          const currentGradient = cssToFabricGradient(
-            toRaw(value.stops),
-            activeObject.width,
-            activeObject.height,
-            value.angle
-          );
-          activeObject.set('fill', currentGradient, value.angle);
-          activeObject.set(angleKey, value.angle);
-        }
-        canvasEditor.canvas.renderAll();
+      if (!activeObject) return;
+      const gradient = parseGradient(value);
+      if (gradient) {
+        const stops = gradient.config.stops.map((stop) => ({
+          color: stop.color.toRgbString(),
+          offset: stop.percentage / 100,
+        }));
+        const currentGradient = cssToFabricGradient(
+          stops,
+          activeObject.width,
+          activeObject.height,
+          gradient.config.angle
+        );
+        activeObject.set('fill', currentGradient);
+        activeObject.set(angleKey, gradient.config.angle);
+      } else {
+        activeObject.set('fill', String(value).replace('NaN', ''));
       }
-    };
-
-    const dropColor = (value) => {
-      colorChange(value);
+      canvasEditor.canvas.renderAll();
     };
 
     const fabricGradientToCss = (val, activeObject) => {
@@ -150,8 +134,7 @@ export default {
       canvasEditor,
       isOne,
       baseAttr,
-      colorChange,
-      dropColor,
+      applyColor,
     };
   },
 };

@@ -232,6 +232,7 @@ export default {
   // 字段内 Input / Select 统一透出容器灰底（去边框）
   .--input,
   .ivu-input,
+  .color-palette-trigger__trigger,
   .ivu-select-selection {
     background-color: transparent;
     border: none !important;
