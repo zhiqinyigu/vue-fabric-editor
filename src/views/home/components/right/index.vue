@@ -24,6 +24,7 @@ import AttributeRounded from '@/components/AttributeRounded.vue';
 import AttributeFont from '@/components/AttributeFont.vue';
 import AttributeTextFloat from '@/components/AttributeTextFloat.vue';
 import AttributeColor from '@/components/AttributeColor.vue';
+import AttributeBlend from '@/components/AttributeBlend.vue';
 import AttributeBarcode from '@/components/AttributeBarcode.vue';
 import AttributeQrCode from '@/components/AttributeQrCode.vue';
 import AttributeTextContent from '@/components/AttributeTextContent.vue';
@@ -62,6 +63,7 @@ export default {
     AttributeFont,
     AttributeTextFloat,
     AttributeColor,
+    AttributeBlend,
     AttributeBarcode,
     AttributeQrCode,
     AttributeTextContent,
@@ -202,6 +204,8 @@ export default {
         <ImgStroke />
         <!-- 颜色 -->
         <AttributeColor></AttributeColor>
+        <!-- 图层模式（混合模式） -->
+        <AttributeBlend></AttributeBlend>
         <!-- 字体属性 -->
         <AttributeFont></AttributeFont>
         <!-- 字体小数点 -->
