@@ -1,10 +1,5 @@
 <script>
 import { inject, ref } from '@vue/composition-api';
-import CenterAlign from '@/components/centerAlign.vue';
-import Flip from '@/components/flip.vue';
-
-import Clone from '@/components/clone.vue';
-import Dele from '@/components/del.vue';
 import Align from '@/components/Align.vue';
 
 import Hide from '@/components/Hide.vue';
@@ -33,6 +28,12 @@ import AttributeQrCode from '@/components/AttributeQrCode.vue';
 import AttributeTextContent from '@/components/AttributeTextContent.vue';
 import ClipImage from '@/components/ClipImage.vue';
 import CropperImg from '@/components/CropperImg.vue';
+// 快捷操作图标（flip / centerAlign 内联到工具栏，保证等宽布局）
+import FlipX from '@/assets/icon/flip/x.svg';
+import FlipY from '@/assets/icon/flip/y.svg';
+import CenterIcon from '@/assets/icon/centerAlign/center.svg';
+import CenterX from '@/assets/icon/centerAlign/CenterX.svg';
+import CenterY from '@/assets/icon/centerAlign/CenterY.svg';
 // hooks
 import useSelectListen from '@/hooks/useSelectListen';
 import { Message } from 'view-design';
@@ -41,13 +42,9 @@ export default {
   name: 'Right',
   components: {
     Align,
-    CenterAlign,
-    Flip,
-    Clone,
     Hide,
     Group,
     Lock,
-    Dele,
     Edit,
     BgBar,
     SetSize,
@@ -68,6 +65,11 @@ export default {
     AttributeTextContent,
     ClipImage,
     CropperImg,
+    FlipX,
+    FlipY,
+    CenterIcon,
+    CenterX,
+    CenterY,
   },
   setup() {
     const canvasEditor = inject('canvasEditor');
@@ -90,12 +92,26 @@ export default {
       attrBarShow.value = !attrBarShow.value;
     };
 
+    // 翻转元素
+    const flip = (type) => {
+      const activeObject = canvasEditor.canvas.getActiveObject();
+      activeObject && activeObject.set(`flip${type}`, !activeObject[`flip${type}`]).setCoords();
+      canvasEditor.canvas.requestRenderAll();
+    };
+
+    // 相对画布/工作区对齐
+    const position = (name) => {
+      canvasEditor.position(name);
+    };
+
     return {
       canvasEditor,
       mixinState,
       attrBarShow,
       switchAttrBar,
       copyElementJson,
+      flip,
+      position,
     };
   },
 };
@@ -105,83 +121,106 @@ export default {
   <div style="display: contents">
     <!-- 属性区域 380-->
     <div v-show="attrBarShow" class="right-bar">
-      <div style="padding-top: 10px">
-        <!-- 未选择元素时 展示背景设置 -->
-        <div v-show="!mixinState.mSelectMode">
-          <SetSize></SetSize>
-          <BgBar></BgBar>
-        </div>
+      <!-- 未选择元素时 展示背景设置 -->
+      <div v-show="!mixinState.mSelectMode">
+        <SetSize></SetSize>
+        <BgBar></BgBar>
+      </div>
 
-        <!-- 多选时展示 -->
-        <div v-show="mixinState.mSelectMode === 'multiple'">
-          <!-- 分组 -->
-          <Group></Group>
-          <Align></Align>
-          <!-- 居中对齐 -->
-          <CenterAlign></CenterAlign>
-        </div>
-
-        <div v-show="mixinState.mSelectMode === 'one'" class="attr-item-box">
-          <!-- 分组 -->
-          <Group></Group>
-          <Divider plain orientation="left">
-            <h4>快捷操作</h4>
-          </Divider>
-          <div v-show="mixinState.mSelectMode" class="bg-item">
-            <Lock></Lock>
-            <Dele></Dele>
-            <Clone></Clone>
-            <Hide></Hide>
-            <Edit></Edit>
-          </div>
-          <!-- 位置信息 -->
-          <AttributePostion></AttributePostion>
-          <!-- 显示 -->
-          <AttributeDisplay></AttributeDisplay>
-          <!-- 居中对齐 -->
-          <CenterAlign></CenterAlign>
-          <!-- 替换图片 -->
-          <ReplaceImg></ReplaceImg>
-          <!-- 裁剪 -->
-          <CropperImg></CropperImg>
-          <!-- 图片裁切 -->
-          <ClipImage></ClipImage>
-          <!-- 翻转 -->
-          <Flip></Flip>
-          <!-- 条形码属性 -->
-          <AttributeBarcode></AttributeBarcode>
-          <!-- 二维码 -->
-          <AttributeQrCode></AttributeQrCode>
-          <!-- 图片滤镜 -->
-          <Filters></Filters>
-          <!-- 图片描边 -->
-          <ImgStroke />
-          <!-- 颜色 -->
-          <AttributeColor></AttributeColor>
-          <!-- 字体属性 -->
-          <AttributeFont></AttributeFont>
-          <!-- 字体小数点 -->
-          <AttributeTextFloat></AttributeTextFloat>
-          <!-- 文字内容  -->
-          <AttributeTextContent></AttributeTextContent>
-          <!-- 阴影 -->
-          <AttributeShadow></AttributeShadow>
-          <!-- 边框 -->
-          <AttributeBorder></AttributeBorder>
-          <!-- 圆角 -->
-          <AttributeRounded></AttributeRounded>
-          <!-- 关联数据 -->
-          <AttributeId></AttributeId>
-
-          <div>
-            <Button size="small" @click="canvasEditor.getFontJson()">获取元素数据</Button>
-            <Button size="small" style="margin-left: 14px" @click="copyElementJson">
-              复制元素数据
+      <!-- 快捷操作（单选/多选共用，按钮按条件显示） -->
+      <div v-show="mixinState.mSelectMode" class="attr-item-box" style="padding-bottom: 6px">
+        <div v-show="mixinState.mSelectMode" class="bg-item">
+          <Tooltip :content="$t('attrSeting.centerAlign.centerX')">
+            <Button long type="text" @click="position('centerH')">
+              <CenterX width="18" height="18"></CenterX>
             </Button>
-          </div>
+          </Tooltip>
+          <Tooltip :content="$t('attrSeting.centerAlign.centerY')">
+            <Button long type="text" @click="position('centerV')">
+              <CenterY width="18" height="18"></CenterY>
+            </Button>
+          </Tooltip>
+          <Tooltip :content="$t('attrSeting.centerAlign.center')">
+            <Button long type="text" @click="position('center')">
+              <CenterIcon width="18" height="18"></CenterIcon>
+            </Button>
+          </Tooltip>
+
+          <Divider type="vertical" />
+          <Tooltip :content="$t('attrSeting.flip.x')">
+            <Button long type="text" @click="flip('X')">
+              <FlipX width="18" height="18"></FlipX>
+            </Button>
+          </Tooltip>
+          <Tooltip :content="$t('attrSeting.flip.y')">
+            <Button long type="text" @click="flip('Y')">
+              <FlipY width="18" height="18"></FlipY>
+            </Button>
+          </Tooltip>
+
+          <Divider type="vertical" />
+          <Lock></Lock>
+          <!-- <dele></dele> -->
+          <!-- <clone></clone> -->
+          <Hide></Hide>
+          <Edit></Edit>
+        </div>
+      </div>
+
+      <!-- 多选时展示 -->
+      <div v-show="mixinState.mSelectMode === 'multiple'">
+        <!-- 分组 -->
+        <Group></Group>
+        <Align></Align>
+      </div>
+
+      <div v-show="mixinState.mSelectMode === 'one'" class="attr-item-box">
+        <!-- 分组 -->
+        <Group></Group>
+        <!-- 位置信息 -->
+        <AttributePostion></AttributePostion>
+        <!-- 显示 -->
+        <AttributeDisplay></AttributeDisplay>
+        <!-- 替换图片 -->
+        <ReplaceImg></ReplaceImg>
+        <!-- 裁剪 -->
+        <CropperImg></CropperImg>
+        <!-- 图片裁切 -->
+        <ClipImage></ClipImage>
+        <!-- 条形码属性 -->
+        <AttributeBarcode></AttributeBarcode>
+        <!-- 二维码 -->
+        <AttributeQrCode></AttributeQrCode>
+        <!-- 图片滤镜 -->
+        <Filters></Filters>
+        <!-- 图片描边 -->
+        <ImgStroke />
+        <!-- 颜色 -->
+        <AttributeColor></AttributeColor>
+        <!-- 字体属性 -->
+        <AttributeFont></AttributeFont>
+        <!-- 字体小数点 -->
+        <AttributeTextFloat></AttributeTextFloat>
+        <!-- 文字内容  -->
+        <AttributeTextContent></AttributeTextContent>
+        <!-- 阴影 -->
+        <AttributeShadow></AttributeShadow>
+        <!-- 边框 -->
+        <AttributeBorder></AttributeBorder>
+        <!-- 圆角 -->
+        <AttributeRounded></AttributeRounded>
+        <!-- 关联数据 -->
+        <AttributeId></AttributeId>
+
+        <div>
+          <Button size="small" @click="canvasEditor.getFontJson()">获取元素数据</Button>
+          <Button size="small" style="margin-left: 14px" @click="copyElementJson">
+            复制元素数据
+          </Button>
         </div>
       </div>
     </div>
+
     <!-- 右侧关闭按钮 -->
     <div
       :class="`close-btn right-btn ${attrBarShow && 'right-btn-open'}`"
@@ -198,6 +237,30 @@ export default {
   padding: 10px;
   overflow-y: auto;
   background: #fff;
+}
+
+// 快捷操作工具栏：10 个按钮均为 .bg-item 的直接 flex 子项，flex:1 严格等宽
+.bg-item {
+  align-items: center;
+
+  // 统一按钮内边距与图标大小：前几个 icon 字体按钮随 font-size 放大，SVG 按钮用大尺寸图标
+  /deep/ .ivu-btn {
+    padding: 0;
+    font-size: 18px;
+  }
+
+  /deep/ .ivu-tooltip {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /deep/ .ivu-divider-vertical {
+    flex-shrink: 0;
+    height: 20px;
+    margin: 0 3px;
+    background: #d8d8d8;
+    top: 1px;
+  }
 }
 
 // 属性面板样式
