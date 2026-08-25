@@ -20,6 +20,7 @@ import ImgStroke from '@/components/ImgStroke.vue';
 
 // 右侧组件
 import AttributePostion from '@/components/AttributePostion.vue';
+import AttributeDisplay from '@/components/AttributeDisplay.vue';
 import AttributeId from '@/components/AttributeId.vue';
 import AttributeShadow from '@/components/AttributeShadow.vue';
 import AttributeBorder from '@/components/AttributeBorder.vue';
@@ -54,6 +55,7 @@ export default {
     Filters,
     ImgStroke,
     AttributePostion,
+    AttributeDisplay,
     AttributeId,
     AttributeShadow,
     AttributeBorder,
@@ -132,6 +134,10 @@ export default {
             <Hide></Hide>
             <Edit></Edit>
           </div>
+          <!-- 位置信息 -->
+          <AttributePostion></AttributePostion>
+          <!-- 显示 -->
+          <AttributeDisplay></AttributeDisplay>
           <!-- 居中对齐 -->
           <CenterAlign></CenterAlign>
           <!-- 替换图片 -->
@@ -158,8 +164,6 @@ export default {
           <AttributeTextFloat></AttributeTextFloat>
           <!-- 文字内容  -->
           <AttributeTextContent></AttributeTextContent>
-          <!-- 位置信息 -->
-          <AttributePostion></AttributePostion>
           <!-- 阴影 -->
           <AttributeShadow></AttributeShadow>
           <!-- 边框 -->

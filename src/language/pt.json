@@ -18,7 +18,13 @@
     "uploadTip": "Clique ou arraste para carregar"
   },
   "sizeSetting": {
+    "title": "Exibição",
+    "width": "L",
+    "height": "A",
+    "lockRatio": "Bloquear proporção",
+    "resetSize": "Restaurar tamanho original"
   },
+  "positionInfo": "Posição",
   "flip": {
     "x": "Inverter horizontalmente",
     "y": "Inverter verticalmente"

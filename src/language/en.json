@@ -18,7 +18,13 @@
     "uploadTip": "Click or drag to upload"
   },
   "sizeSetting": {
+    "title": "Display",
+    "width": "W",
+    "height": "H",
+    "lockRatio": "Lock ratio",
+    "resetSize": "Restore to original size"
   },
+  "positionInfo": "Position",
   "flip": {
     "x": "flip x",
     "y": "flip y"

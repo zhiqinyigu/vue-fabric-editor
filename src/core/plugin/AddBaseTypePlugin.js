@@ -15,11 +15,12 @@ class AddBaseTypePlugin {
         this.canvas = canvas;
     }
     addBaseType(item, optons) {
-        const { event = false, scale = false, center = true } = optons || {};
+        const { event = false, center = true } = optons || {};
         item.set({
             id: uuid(),
         });
-        scale && this._toScale(item);
+        // 超出画布80%时等比缩小，否则保持原始尺寸
+        this._fitOverflow(item);
         event && this._toEvent(item, event);
         this.canvas.add(item);
         if (!event && center) {
@@ -47,11 +48,22 @@ class AddBaseTypePlugin {
         this.canvas.setActiveObject(item);
         this.editor.position('center');
     }
-    _toScale(item) {
-        const { width } = this.editor.getWorkspase();
-        if (width === undefined)
+    // 超出画布80%时等比缩小（默认保持原始尺寸）
+    _fitOverflow(item) {
+        if (item.width === undefined || item.height === undefined) {
             return;
-        item.scaleToWidth(width / 2);
+        }
+        const workspace = this.editor.getWorkspase();
+        if (!workspace) {
+            return;
+        }
+        const maxWidth = workspace.getScaledWidth() * 0.8;
+        const maxHeight = workspace.getScaledHeight() * 0.8;
+        const ratio = Math.min(maxWidth / item.getScaledWidth(), maxHeight / item.getScaledHeight());
+        if (ratio < 1) {
+            item.scaleX *= ratio;
+            item.scaleY *= ratio;
+        }
     }
     createImgByElement(target) {
         return new Promise((resolve) => {

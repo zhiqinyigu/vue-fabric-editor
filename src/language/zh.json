@@ -18,7 +18,13 @@
     "uploadTip": "点击或拖拽上传"
   },
   "sizeSetting": {
+    "title": "显示",
+    "width": "宽",
+    "height": "高",
+    "lockRatio": "比例锁",
+    "resetSize": "恢复到原始尺寸"
   },
+  "positionInfo": "位置",
   "flip": {
     "x": "水平翻转",
     "y": "垂直翻转"

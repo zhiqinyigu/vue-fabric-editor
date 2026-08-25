@@ -164,13 +164,11 @@ class ServersPlugin {
                 x: event.x - left,
                 y: event.y - top,
             };
-            const pointerVpt = this.canvas.restorePointerVpt(point);
-            item.left = pointerVpt.x - item.width / 2;
-            item.top = pointerVpt.y;
-        }
-        const { width } = this._getSaveOption();
-        width && item.scaleToWidth(width / 2);
-        this.canvas.add(item);
+        const pointerVpt = this.canvas.restorePointerVpt(point);
+        item.left = pointerVpt.x - item.width / 2;
+        item.top = pointerVpt.y;
+    }
+    this.canvas.add(item);
         this.canvas.setActiveObject(item);
         !event && this.editor.position('center');
         this.canvas.requestRenderAll();
