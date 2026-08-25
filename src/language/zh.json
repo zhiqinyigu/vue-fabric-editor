@@ -22,7 +22,10 @@
     "width": "宽",
     "height": "高",
     "lockRatio": "比例锁",
-    "resetSize": "恢复到原始尺寸"
+    "resetSize": "恢复到原始尺寸",
+    "clipLock": "固定尺寸",
+    "clipLockOn": "取消固定尺寸",
+    "ellipsis": "启用省略号"
   },
   "positionInfo": "位置",
   "flip": {

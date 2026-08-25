@@ -22,7 +22,10 @@
     "width": "W",
     "height": "H",
     "lockRatio": "Lock ratio",
-    "resetSize": "Restore to original size"
+    "resetSize": "Restore to original size",
+    "clipLock": "Fixed size",
+    "clipLockOn": "Unlock fixed size",
+    "ellipsis": "Enable ellipsis"
   },
   "positionInfo": "Position",
   "flip": {

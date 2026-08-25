@@ -76,10 +76,21 @@ class FontPlugin {
         });
         return Promise.all(fontFamiliesAll).then(() => {
             // 字体加载完成后：回退字体测量值已失效，清除字符宽缓存并重测所有文本
-                        return;
+            this._remeasureTexts();
+            return;
         });
     }
     // 清除 fabric 字符宽度缓存并对所有 textbox 重排/重测（自定义字体替换回退字体的测量差异）
+    _remeasureTexts() {
+        fabric.charWidthsCache = {};
+        this.canvas.getObjects().forEach((obj) => {
+            if (obj.type === 'textbox' && obj.initDimensions) {
+                obj.initDimensions();
+                obj.setCoords && obj.setCoords();
+            }
+        });
+        this.canvas.requestRenderAll && this.canvas.requestRenderAll();
+    }
     // 获取字体数据 新增字体样式使用
     getFontJson() {
         const activeObject = this.canvas.getActiveObject();
@@ -99,7 +110,8 @@ class FontPlugin {
                 activeObject.set('fontFamily', fontName);
             }
             // 字体加载完成后对所有 textbox 重排/重测（清除回退字体的测量缓存）
-                    });
+            this._remeasureTexts();
+        });
     }
     createFontCSS(arr) {
         let code = '';

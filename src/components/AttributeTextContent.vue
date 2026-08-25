@@ -16,7 +16,7 @@ export default {
   },
   setup() {
     const update = getCurrentInstance();
-    const { canvasEditor, isOne, isMatchType } = useSelect(['i-text']);
+    const { canvasEditor, isOne, isMatchType } = useSelect(['i-text', 'textbox']);
     const baseAttr = reactive({
       text: '',
       strokeWidth: 1,

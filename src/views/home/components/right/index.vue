@@ -16,6 +16,7 @@ import ImgStroke from '@/components/ImgStroke.vue';
 // 右侧组件
 import AttributePostion from '@/components/AttributePostion.vue';
 import AttributeDisplay from '@/components/AttributeDisplay.vue';
+import AttributeDisplayText from '@/components/AttributeDisplayText.vue';
 import AttributeId from '@/components/AttributeId.vue';
 import AttributeShadow from '@/components/AttributeShadow.vue';
 import AttributeBorder from '@/components/AttributeBorder.vue';
@@ -53,6 +54,7 @@ export default {
     ImgStroke,
     AttributePostion,
     AttributeDisplay,
+    AttributeDisplayText,
     AttributeId,
     AttributeShadow,
     AttributeBorder,
@@ -179,8 +181,11 @@ export default {
         <Group></Group>
         <!-- 位置信息 -->
         <AttributePostion></AttributePostion>
-        <!-- 显示 -->
-        <AttributeDisplay></AttributeDisplay>
+        <!-- 显示：textbox 用专用尺寸面板，其它类型用通用面板（v-show 保持常驻，避免错过选择事件） -->
+        <AttributeDisplay v-show="mixinState.mSelectOneType !== 'textbox'"></AttributeDisplay>
+        <AttributeDisplayText
+          v-show="mixinState.mSelectOneType === 'textbox'"
+        ></AttributeDisplayText>
         <!-- 替换图片 -->
         <ReplaceImg></ReplaceImg>
         <!-- 裁剪 -->

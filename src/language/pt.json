@@ -22,7 +22,10 @@
     "width": "L",
     "height": "A",
     "lockRatio": "Bloquear proporção",
-    "resetSize": "Restaurar tamanho original"
+    "resetSize": "Restaurar tamanho original",
+    "clipLock": "Tamanho fixo",
+    "clipLockOn": "Cancelar tamanho fixo",
+    "ellipsis": "Ativar reticências"
   },
   "positionInfo": "Posição",
   "flip": {
