@@ -12,6 +12,7 @@ import SetSize from '@/components/SetSize.vue';
 import ReplaceImg from '@/components/ReplaceImg.vue';
 import Filters from '@/components/Filters.vue';
 import ImgStroke from '@/components/ImgStroke.vue';
+import AttributeOnlineImg from '@/components/AttributeOnlineImg.vue';
 
 // 右侧组件
 import AttributePostion from '@/components/AttributePostion.vue';
@@ -51,6 +52,7 @@ export default {
     BgBar,
     SetSize,
     ReplaceImg,
+    AttributeOnlineImg,
     Filters,
     ImgStroke,
     AttributePostion,
@@ -188,6 +190,8 @@ export default {
         <AttributeDisplayText
           v-show="mixinState.mSelectOneType === 'textbox'"
         ></AttributeDisplayText>
+        <!-- 网络图片地址回显与编辑 -->
+        <AttributeOnlineImg></AttributeOnlineImg>
         <!-- 替换图片 -->
         <ReplaceImg></ReplaceImg>
         <!-- 裁剪 -->

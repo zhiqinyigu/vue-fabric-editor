@@ -2,7 +2,7 @@
   <div class="tool-panel">
     <Divider plain orientation="left">{{ $t('insertFile.insert') }}</Divider>
     <div class="tool-box">
-      <span :title="$t('insertFile.insert_picture')" @click="insertTypeHand('insertImg')">
+      <span :title="$t('insertFile.insert_picture')" @click="openInsertImage">
         <InsertImgIcon width="26" height="26"></InsertImgIcon>
         <span>{{ $t('insertFile.insert_picture_label') }}</span>
       </span>
@@ -123,6 +123,7 @@
         :placeholder="$t('insertFile.insert_JSON_placeholder')"
       />
     </Modal>
+    <!-- 统一图片来源选择器已挂载于 home 根节点，tools 仅负责触发 -->
   </div>
 </template>
 
@@ -134,6 +135,7 @@ import { getPolygonVertices } from '@/utils/math';
 import { Utils } from '@/core/index';
 import useSelect from '@/hooks/select';
 import { isFixedLayerObject } from '@/core/utils/utils';
+import useImagePicker from '@/hooks/useImagePicker';
 import CircleIcon from '@/assets/icon/tools/circle.svg';
 import Draw1Icon from '@/assets/icon/tools/draw1.svg';
 import Draw2Icon from '@/assets/icon/tools/draw2.svg';
@@ -203,16 +205,6 @@ function useInsertFile() {
   }
 
   const HANDLEMAP = {
-    // 插入图片
-    insertImg: function () {
-      selectFiles({ accept: 'image/*', multiple: true }).then((fileList) => {
-        Array.from(fileList).forEach((item) => {
-          getImgStr(item).then((file) => {
-            insertImgFile(file);
-          });
-        });
-      });
-    },
     // 插入Svg
     insertSvg: function () {
       selectFiles({ accept: '.svg', multiple: true }).then((fileList) => {
@@ -273,6 +265,7 @@ function useInsertFile() {
   return {
     state,
     insertTypeHand,
+    insertImgFile,
   };
 }
 
@@ -303,7 +296,15 @@ export default {
   },
   setup(props) {
     const { fabric, canvasEditor } = useSelect();
-    const { state: insertState, insertTypeHand } = useInsertFile();
+    const { openImagePicker } = useImagePicker();
+    const { state: insertState, insertTypeHand, insertImgFile } = useInsertFile();
+    // 打开统一图片来源选择器，插入为画布元素
+    const openInsertImage = () => {
+      openImagePicker({
+        mode: 'insert',
+        onDone: (src) => insertImgFile(src),
+      });
+    };
     const LINE_TYPE = {
       line: 'line',
       arrow: 'arrow',
@@ -520,6 +521,7 @@ export default {
       canvasEditor,
       insertState,
       insertTypeHand,
+      openInsertImage,
       addText,
       addTextBox,
       addTriangle,
@@ -574,5 +576,15 @@ export default {
 }
 .img {
   width: 20px;
+}
+.online-img-option {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+}
+.online-img-tip {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #999;
 }
 </style>

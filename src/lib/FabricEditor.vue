@@ -79,6 +79,8 @@
           <RightPanel v-if="state.ready" />
         </div>
       </Content>
+      <!-- 统一图片来源选择器（tools / bgBar 共用） -->
+      <ImagePickerModal />
     </Layout>
   </div>
 </template>
@@ -151,6 +153,7 @@ import History from '@/components/History.vue';
 // import PreviewCurrent from '@/components/PreviewCurrent.vue';
 import Save from '@/components/Save.vue';
 import Clear from '@/components/Clear.vue';
+import ImagePickerModal from '@/components/ImagePickerModal.vue';
 
 export default {
   name: 'FabricEditor',
@@ -165,6 +168,7 @@ export default {
     // PreviewCurrent,
     Save,
     Clear,
+    ImagePickerModal,
   },
   props: {
     adapters: { type: Object, default: () => ({}) },

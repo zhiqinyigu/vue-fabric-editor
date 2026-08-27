@@ -30,16 +30,8 @@
     <!-- 背景图片 -->
     <AttrSection :title="$t('bgSeting.image')">
       <div class="bg-image-card">
-        <!-- 空态：点击或拖拽上传 -->
-        <div
-          v-if="!bgImageUrl"
-          class="bg-image-empty"
-          :class="{ 'is-dragover': bgDragging }"
-          @click="uploadBgImage"
-          @dragover.prevent="bgDragging = true"
-          @dragleave.prevent="bgDragging = false"
-          @drop.prevent="dropBgImage"
-        >
+        <!-- 空态：点击打开统一图片来源选择器 -->
+        <div v-if="!bgImageUrl" class="bg-image-empty" @click="openBackgroundImage">
           <Icon type="ios-cloud-upload-outline" size="34" />
           <span>{{ $t('bgSeting.uploadImage') }}</span>
           <em>{{ $t('bgSeting.uploadTip') }}</em>
@@ -47,19 +39,11 @@
 
         <!-- 已设置：预览(左) + 操作列(右) -->
         <div v-else class="bg-image-body">
-          <div
-            class="bg-image-preview"
-            :class="{ 'is-dragover': bgDragging }"
-            title="点击更换"
-            @click="uploadBgImage"
-            @dragover.prevent="bgDragging = true"
-            @dragleave.prevent="bgDragging = false"
-            @drop.prevent="dropBgImage"
-          >
+          <div class="bg-image-preview" title="点击更换" @click="openBackgroundImage">
             <img :src="bgImageUrl" alt="background" />
           </div>
           <div class="bg-image-actions">
-            <Button size="small" icon="ios-refresh" @click="uploadBgImage">
+            <Button size="small" icon="ios-refresh" @click="openBackgroundImage">
               {{ $t('bgSeting.reUpload') }}
             </Button>
             <Button size="small" icon="ios-expand" @click="fitCanvasToBg">
@@ -107,7 +91,7 @@
 // import workspaceMask from './workspaceMask.vue';
 import { ref, toRaw, onMounted, onUnmounted } from '@vue/composition-api';
 import useSelect from '@/hooks/select';
-import { Utils } from '@/core/index';
+import useImagePicker from '@/hooks/useImagePicker';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import ColorPicker from './color-picker';
 import { RGBA2HexA } from './color-picker/utils/color.js';
@@ -120,39 +104,26 @@ export default {
   },
   setup() {
     const { isSelect, canvasEditor, fabric } = useSelect();
-    const { selectFiles, getImgStr } = Utils;
+    const { openImagePicker } = useImagePicker();
     const angleKey = 'gradientAngle';
 
     // ===== 背景图片 =====
     const bgImageUrl = ref('');
     const bgMode = ref('cover');
     const bgOpacity = ref(100);
-    const bgDragging = ref(false);
 
-    // 统一的背景图设置入口（上传/拖拽共用）
-    const setBgImage = (file) => {
-      if (!file) return;
-      getImgStr(file).then((dataUrl) => {
-        bgImageUrl.value = dataUrl;
-        canvasEditor.setBackgroundImage(dataUrl, bgMode.value);
-        canvasEditor.setBackgroundOpacity(bgOpacity.value);
-      });
+    // 打开统一图片来源选择器，将选中的图片设为背景
+    const applyBackgroundSrc = (src) => {
+      if (!src) return;
+      bgImageUrl.value = src;
+      canvasEditor.setBackgroundImage(src, bgMode.value);
+      canvasEditor.setBackgroundOpacity(bgOpacity.value);
     };
-
-    const uploadBgImage = () => {
-      selectFiles({ accept: 'image/*' }).then((files) => {
-        if (files && files[0]) {
-          setBgImage(files[0]);
-        }
+    const openBackgroundImage = () => {
+      openImagePicker({
+        mode: 'background',
+        onDone: applyBackgroundSrc,
       });
-    };
-
-    const dropBgImage = (e) => {
-      bgDragging.value = false;
-      const files = e.dataTransfer && e.dataTransfer.files;
-      if (files && files[0]) {
-        setBgImage(files[0]);
-      }
     };
 
     const removeBgImage = () => {
@@ -338,9 +309,8 @@ export default {
       bgImageUrl,
       bgMode,
       bgOpacity,
-      bgDragging,
-      uploadBgImage,
-      dropBgImage,
+      openBackgroundImage,
+      applyBackgroundSrc,
       removeBgImage,
       changeBgMode,
       changeBgOpacity,
@@ -374,22 +344,22 @@ export default {
   padding: 10px;
   background: #f8f8f9;
 }
-// 空态：虚线占位（点击或拖拽上传）
+// 空态：点击选择背景图（仅点击入口）
 .bg-image-empty {
-  height: 110px;
+  height: 96px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   color: #808695;
   cursor: pointer;
-  border: 1px dashed #dcdee2;
+  border: 1px solid #e8eaec;
   border-radius: 4px;
   background: #fff;
   transition: all 0.2s;
   .ivu-icon {
-    color: #c5c8ce;
+    color: #9ea7b4;
     transition: color 0.2s;
   }
   em {
@@ -397,10 +367,10 @@ export default {
     font-size: 12px;
     color: #c5c8ce;
   }
-  &:hover,
-  &.is-dragover {
+  &:hover {
     border-color: #2d8cf0;
     color: #2d8cf0;
+    background: #f6faff;
     .ivu-icon {
       color: #2d8cf0;
     }
@@ -425,9 +395,6 @@ export default {
   background: #fff;
   cursor: pointer;
   transition: border-color 0.2s;
-  &.is-dragover {
-    border-color: #2d8cf0;
-  }
   img {
     max-width: 100%;
     max-height: 100%;

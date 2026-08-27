@@ -25,6 +25,8 @@
         </div>
         <Right v-if="state.show"></Right>
       </Content>
+      <!-- 统一图片来源选择器（tools / bgBar 共用） -->
+      <ImagePickerModal></ImagePickerModal>
     </Layout>
   </div>
 </template>
@@ -37,6 +39,7 @@ import Right from './components/right/index.vue';
 
 import Zoom from '@/components/Zoom.vue';
 import DragMode from '@/components/DragMode.vue';
+import ImagePickerModal from '@/components/ImagePickerModal.vue';
 // 功能组件
 import { fabric } from 'fabric';
 
@@ -89,6 +92,7 @@ export default {
     Right,
     Zoom,
     DragMode,
+    ImagePickerModal,
   },
   setup() {
     const state = reactive({

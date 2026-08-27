@@ -15,7 +15,7 @@
     "tile": "Tile",
     "opacity": "Opacity",
     "fitCanvas": "Sync canvas size",
-    "uploadTip": "Click or drag to upload"
+    "uploadTip": "Click to choose a background image"
   },
   "sizeSetting": {
     "title": "Display",
@@ -155,6 +155,19 @@
     "insert": "insert",
     "insert_picture": "Insert picture",
     "insert_picture_label": "Picture",
+    "insert_local_image": "Local image",
+    "insert_local_image_btn": "Choose local image",
+    "insert_local_image_drop_hint": "Click to choose or drag an image here (background mode supports only one)",
+    "insert_online_image_placeholder": "Enter the online image URL",
+    "insert_online_image_empty": "Please enter the online image URL",
+    "insert_online_image_invalid": "Please enter a valid http/https image URL",
+    "insert_online_image_error": "Failed to load image, please check the URL and CORS settings",
+    "insert_online_image_convert": "Convert to local image",
+    "insert_online_image_convert_tip": "Exports as base64 when checked, increasing the export data size",
+    "insert_online_image_url": "Image URL",
+    "insert_online_image_upload_btn": "Choose a local image to upload",
+    "insert_online_image_upload_success": "Uploaded, URL filled back",
+    "insert_online_image_upload_error": "Upload failed",
     "insert_SVG": "Insert SVG",
     "insert_SVG_label": "SVG",
     "insert_SVGStr": "Insert SVG String",
@@ -171,6 +184,9 @@
   },
   "attributes": {
     "id": "ID",
+    "online_image_url": "Online image URL",
+    "apply": "Apply",
+    "apply_success": "Image URL updated",
     "stroke": "Stroke:",
     "line_height": "Line height",
     "char_spacing": "Spacing",

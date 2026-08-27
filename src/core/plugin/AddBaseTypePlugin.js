@@ -66,10 +66,14 @@ class AddBaseTypePlugin {
         }
     }
     createImgByElement(target) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const imgType = this.getImageExtension(target.src);
             if (imgType === 'svg') {
                 fabric.loadSVGFromURL(target.src, (objects) => {
+                    if (!objects || objects.length === 0) {
+                        reject(new Error('SVG 图片加载失败，请检查地址与跨域(CORS)设置'));
+                        return;
+                    }
                     const item = fabric.util.groupSVGElements(objects, {
                         shadow: '',
                         fontFamily: 'arial',
@@ -79,17 +83,27 @@ class AddBaseTypePlugin {
                 });
             }
             else {
-                fabric.Image.fromURL(target.src, (imgEl) => {
+                fabric.Image.fromURL(target.src, (imgEl, isError) => {
+                    if (isError) {
+                        reject(new Error('图片加载失败，请检查地址与跨域(CORS)设置'));
+                        return;
+                    }
                     resolve(imgEl);
                 }, { crossOrigin: 'anonymous' });
             }
         });
     }
     getImageExtension(imageUrl) {
-        const pathParts = imageUrl.split('/');
+        // 去除查询参数与 hash，兼容带参数的在线图片地址，避免扩展名误判
+        const cleanUrl = (imageUrl || '').split('?')[0].split('#')[0];
+        const pathParts = cleanUrl.split('/');
         const filename = pathParts[pathParts.length - 1];
         const fileParts = filename.split('.');
-        return fileParts[fileParts.length - 1];
+        // 仅当确实存在扩展名时才返回，否则视为无扩展名（如 data URL、纯路径地址）
+        if (fileParts.length > 1) {
+            return fileParts[fileParts.length - 1].toLowerCase();
+        }
+        return '';
     }
     destroy() {
         console.log('pluginDestroy');

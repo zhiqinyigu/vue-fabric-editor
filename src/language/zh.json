@@ -15,7 +15,7 @@
     "tile": "平铺",
     "opacity": "透明度",
     "fitCanvas": "同步画布尺寸",
-    "uploadTip": "点击或拖拽上传"
+    "uploadTip": "点击选择背景图片"
   },
   "sizeSetting": {
     "title": "显示",
@@ -155,6 +155,19 @@
     "insert": "插入",
     "insert_picture": "插入图片",
     "insert_picture_label": "图片",
+    "insert_local_image": "本地图片",
+    "insert_local_image_btn": "选择本地图片",
+    "insert_local_image_drop_hint": "点击选择或拖拽图片到此处（背景模式仅支持一张）",
+    "insert_online_image_placeholder": "请输入在线图片URL",
+    "insert_online_image_empty": "请输入在线图片地址",
+    "insert_online_image_invalid": "请输入有效的 http/https 图片地址",
+    "insert_online_image_error": "图片加载失败，请检查地址与跨域(CORS)设置",
+    "insert_online_image_convert": "转成本地图片",
+    "insert_online_image_convert_tip": "勾选后导出为 base64，会增加导出数据的大小",
+    "insert_online_image_url": "图片地址",
+    "insert_online_image_upload_btn": "选择本地图片上传",
+    "insert_online_image_upload_success": "上传成功，已回填地址",
+    "insert_online_image_upload_error": "上传失败",
     "insert_SVG": "插入SVG元素",
     "insert_SVG_label": "SVG",
     "insert_SVGStr": "插入SVG字符",
@@ -171,6 +184,9 @@
   },
   "attributes": {
     "id": "标识",
+    "online_image_url": "在线图片地址",
+    "apply": "应用",
+    "apply_success": "图片地址已更新",
     "stroke": "边框",
     "line_height": "行高",
     "char_spacing": "间距",

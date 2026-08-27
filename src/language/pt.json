@@ -15,7 +15,7 @@
     "tile": "Ladrilho",
     "opacity": "Opacidade",
     "fitCanvas": "Sincronizar tamanho da tela",
-    "uploadTip": "Clique ou arraste para carregar"
+    "uploadTip": "Clique para escolher uma imagem de fundo"
   },
   "sizeSetting": {
     "title": "Exibição",
@@ -155,6 +155,19 @@
     "insert": "insert",
     "insert_picture": "Insert picture",
     "insert_picture_label": "Imagem",
+    "insert_local_image": "Imagem local",
+    "insert_local_image_btn": "Escolher imagem local",
+    "insert_local_image_drop_hint": "Clique para escolher ou arraste uma imagem aqui (o modo de fundo suporta apenas uma)",
+    "insert_online_image_placeholder": "Digite o URL da imagem online",
+    "insert_online_image_empty": "Digite o URL da imagem online",
+    "insert_online_image_invalid": "Digite um URL de imagem http/https válido",
+    "insert_online_image_error": "Falha ao carregar imagem, verifique o URL e as configurações de CORS",
+    "insert_online_image_convert": "Converter para imagem local",
+    "insert_online_image_convert_tip": "Quando marcado, exporta como base64, aumentando o tamanho dos dados exportados",
+    "insert_online_image_url": "URL da imagem",
+    "insert_online_image_upload_btn": "Escolher uma imagem local para enviar",
+    "insert_online_image_upload_success": "Enviado, URL preenchido",
+    "insert_online_image_upload_error": "Falha no envio",
     "insert_SVG": "Insert SVG",
     "insert_SVG_label": "SVG",
     "insert_SVGStr": "Insert SVG String",
@@ -171,6 +184,9 @@
   },
   "attributes": {
     "id": "ID",
+    "online_image_url": "URL da imagem online",
+    "apply": "Aplicar",
+    "apply_success": "URL da imagem atualizada",
     "stroke": "Stroke:",
     "line_height": "Line height",
     "char_spacing": "Espaço Char.",
