@@ -133,8 +133,16 @@ class ServersPlugin {
         });
     }
     getJson() {
+        // 保存/导出模板 JSON 前，强制退出变量预览，确保使用原始占位符
+        const vp = this.editor.getPlugin('VariablePlugin');
+        vp && vp.exitPreview && vp.exitPreview();
         const keys = this.getExtensionKey();
-        return this.canvas.toJSON(keys);
+        const json = this.canvas.toJSON(keys);
+        // 附加模板变量元数据（包裹符 + 变量声明），供前台用户端解析与渲染
+        if (vp && vp.getVariableMeta) {
+            json.variableMeta = vp.getVariableMeta();
+        }
+        return json;
     }
     getExtensionKey() {
         return [
@@ -148,6 +156,7 @@ class ServersPlugin {
             'verticalAlign',
             'roundValue',
             'backgroundImageMode',
+            'isVariableImage',
         ];
     }
     /**

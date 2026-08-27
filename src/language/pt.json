@@ -231,5 +231,25 @@
   "cancel": "Cancelar",
   "cleanUp": "Limpar",
   "variable": {
+    "title": "Configuração de variável",
+    "open": "Configuração de variável",
+    "delimiter_title": "Delimitador de variável",
+    "delimiter_changed": "Delimitador alterado. A tabela de mapeamento foi coletada novamente com o novo delimitador.",
+    "start": "Início",
+    "end": "Fim",
+    "example": "Exemplo",
+    "apply": "Aplicar",
+    "testdata_title": "Mapeamento de dados de teste",
+    "no_variable": "Nenhuma variável de modelo encontrada. Você pode digitar {{var}} no conteúdo do texto ou na URL da imagem.",
+    "input_test_value": "Insira um valor de teste",
+    "variable": "Variável",
+    "test_value": "Valor de teste",
+    "preview": "Aplicar e visualizar",
+    "restore": "Sair da visualização e restaurar",
+    "previewing": "Visualizando com dados de teste, não afeta o salvamento do modelo",
+    "close": "Fechar",
+    "text_has_variable": "Este texto contém variáveis de modelo, será renderizado com dados no frontend",
+    "url_is_dynamic": "Esta URL é uma imagem de variável dinâmica, renderizada com dados no frontend; mostrando imagem de placeholder agora",
+    "cannot_convert_local": "URLs com variáveis não podem ser convertidas em imagens locais, caso contrário as variáveis serão perdidas"
   }
 }

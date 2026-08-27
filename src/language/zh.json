@@ -231,5 +231,25 @@
   "cancel": "取消",
   "cleanUp": "清除",
   "variable": {
+    "title": "变量配置",
+    "open": "变量配置",
+    "delimiter_title": "变量包裹符",
+    "delimiter_changed": "包裹符已变更，映射表已按新包裹符重新收集",
+    "start": "开始",
+    "end": "结束",
+    "example": "格式示例",
+    "apply": "应用",
+    "testdata_title": "测试数据映射表",
+    "no_variable": "当前画布中暂无模板变量，可在文本内容或网络图片 URL 中输入 {{变量名}}",
+    "input_test_value": "请输入测试值",
+    "variable": "变量",
+    "test_value": "测试值",
+    "preview": "应用并预览",
+    "restore": "退出预览恢复",
+    "previewing": "当前为测试数据预览，不影响模板保存",
+    "close": "关闭",
+    "text_has_variable": "该文本包含模板变量，前台将按数据替换渲染",
+    "url_is_dynamic": "该 URL 为动态变量图片，前台会按数据替换渲染，当前显示占位图",
+    "cannot_convert_local": "含变量的 URL 不能转成本地图片，否则会丢失变量"
   }
 }

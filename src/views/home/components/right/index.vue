@@ -13,9 +13,11 @@ import ReplaceImg from '@/components/ReplaceImg.vue';
 import Filters from '@/components/Filters.vue';
 import ImgStroke from '@/components/ImgStroke.vue';
 import AttributeOnlineImg from '@/components/AttributeOnlineImg.vue';
+import AttributeVariable from '@/components/AttributeVariable.vue';
 
 // 右侧组件
 import AttributePostion from '@/components/AttributePostion.vue';
+import AttributeClip from '@/components/AttributeClip.vue';
 import AttributeDisplay from '@/components/AttributeDisplay.vue';
 import AttributeDisplayText from '@/components/AttributeDisplayText.vue';
 import AttributeId from '@/components/AttributeId.vue';
@@ -40,6 +42,7 @@ import CenterY from '@/assets/icon/centerAlign/CenterY.svg';
 // hooks
 import useSelectListen from '@/hooks/useSelectListen';
 import { Message } from 'view-design';
+import AttrSection from '@/components/attrPanel/AttrSection.vue';
 
 export default {
   name: 'Right',
@@ -51,11 +54,13 @@ export default {
     Edit,
     BgBar,
     SetSize,
+    AttributeVariable,
     ReplaceImg,
     AttributeOnlineImg,
     Filters,
     ImgStroke,
     AttributePostion,
+    AttributeClip,
     AttributeDisplay,
     AttributeDisplayText,
     AttributeId,
@@ -76,6 +81,7 @@ export default {
     CenterIcon,
     CenterX,
     CenterY,
+    AttrSection,
   },
   setup() {
     const canvasEditor = inject('canvasEditor');
@@ -95,6 +101,14 @@ export default {
 
     // 当前选中图片的类型：normal 普通图片 / online 网络图片 / variable 变量图片
     const imageType = ref('normal');
+
+    // 裁切会话（裁切 shell 选中）：useSelectListen 会将 shell 判空，
+    // 空态容器里的「变量配置」按钮会在此期间漏出，须显式抑制
+    const cropSession = ref(false);
+    const refreshCropSession = () => {
+      const activeObject = canvasEditor.canvas.getActiveObject();
+      cropSession.value = !!(activeObject && activeObject.get && activeObject.get('clip') === true);
+    };
 
     const isOnlineUrl = (src) => typeof src === 'string' && /^https?:\/\/.+$/i.test(src);
 
@@ -122,14 +136,27 @@ export default {
 
     onMounted(() => {
       refreshImageType();
+      refreshCropSession();
       canvasEditor.on('selectOne', refreshImageType);
       canvasEditor.on('selectCancel', refreshImageType);
       canvasEditor.canvas.on('object:modified', refreshImageType);
+      // 裁切会话检测：selection 直连 + 交互过程实时刷新（判空态下编辑器事件不派发 selection）
+      canvasEditor.on('selectOne', refreshCropSession);
+      canvasEditor.on('selectCancel', refreshCropSession);
+      const canvas = canvasEditor.canvas;
+      canvas.on('selection:created', refreshCropSession);
+      canvas.on('selection:updated', refreshCropSession);
+      canvas.on('selection:cleared', refreshCropSession);
     });
     onBeforeUnmount(() => {
       canvasEditor.off('selectOne', refreshImageType);
       canvasEditor.off('selectCancel', refreshImageType);
       canvasEditor.canvas.off('object:modified', refreshImageType);
+      canvasEditor.off('selectOne', refreshCropSession);
+      canvasEditor.off('selectCancel', refreshCropSession);
+      canvasEditor.canvas.off('selection:created', refreshCropSession);
+      canvasEditor.canvas.off('selection:updated', refreshCropSession);
+      canvasEditor.canvas.off('selection:cleared', refreshCropSession);
     });
 
     // 属性面板开关
@@ -157,6 +184,7 @@ export default {
       copyElementJson,
       flip,
       position,
+      cropSession,
       imageType,
     };
   },
@@ -167,10 +195,11 @@ export default {
   <div style="display: contents">
     <!-- 属性区域 380-->
     <div v-show="attrBarShow" class="right-bar">
-      <!-- 未选择元素时 展示背景设置 -->
-      <div v-show="!mixinState.mSelectMode">
+      <!-- 未选择元素时 展示背景设置（裁切会话判空态下抑制，避免变量配置按钮漏出） -->
+      <div v-show="!mixinState.mSelectMode && !cropSession">
         <SetSize></SetSize>
         <BgBar></BgBar>
+        <AttributeVariable></AttributeVariable>
       </div>
 
       <!-- 快捷操作（单选/多选共用，按钮按条件显示） -->
@@ -232,15 +261,17 @@ export default {
         ></AttributeDisplayText>
         <!-- 网络图片地址回显与编辑 -->
         <AttributeOnlineImg />
-        <!-- 图片操作分组：替换图片 / 裁剪 / 图片裁切 -->
-        <div
-          v-show="mixinState.mSelectOneType === 'image'"
-          class="attr-item-box"
+        <!-- 图片操作分组：替换图片 / 裁剪 / 图片裁切
+             ⚠ 坑：此插槽内的 replaceImg/cropperImg/clipImage 通过自身监听 canvasEditor.selectOne 事件
+             获取当前选中图片类型（type），而非由父组件传值。因此它们必须常驻挂载才能收到事件。
+             AttrSection 的 :show 依赖内部 v-show（而非 v-if）实现，切不可把 AttrSection 改为 v-if 卸载子树，
+             否则子组件会错过已派发过的 selectOne 事件、初始化不到选中类型，表现为只剩空灰底、按钮不渲染。
+             同理，在此插槽内放置其它「自监听事件」的子组件时，也应保持常驻（v-show），勿用 v-if 卸载。 -->
+        <AttrSection
+          :title="$t('imageOps')"
+          :show="mixinState.mSelectOneType === 'image'"
           style="padding-bottom: 6px"
         >
-          <Divider plain orientation="left">
-            <h4>{{ $t('imageOps') }}</h4>
-          </Divider>
           <div class="bg-item">
             <!-- 在线图片（含网络图片、变量图片）不展示"替换图片" -->
             <ReplaceImg v-show="imageType === 'normal'"></ReplaceImg>
@@ -250,7 +281,7 @@ export default {
             <CropperImg v-show="imageType === 'normal'"></CropperImg>
             <ClipImage></ClipImage>
           </div>
-        </div>
+        </AttrSection>
         <!-- 条形码属性 -->
         <AttributeBarcode></AttributeBarcode>
         <!-- 二维码 -->
@@ -285,6 +316,11 @@ export default {
           </Button>
         </div>
       </div>
+
+      <!-- 裁切精准设置：裁切 shell 选中时展示（X/Y/W/H 滑杆角度，相对图片）。
+           独立于常规选中面板容器：裁切会话里裁切 shell 会被 useSelectListen 判空（空态），
+           放进容器内会被 v-show 一并隐藏，故外挂、由组件自主判定可见性 -->
+      <AttributeClip></AttributeClip>
     </div>
 
     <!-- 右侧关闭按钮 -->

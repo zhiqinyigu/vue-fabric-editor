@@ -66,6 +66,11 @@ class AddBaseTypePlugin {
         }
     }
     createImgByElement(target) {
+        // URL 含模板变量时，改走变量占位图（真实 src 保留变量 URL）
+        const vp = this.editor.getPlugin('VariablePlugin');
+        if (vp && vp.containsVariable && vp.containsVariable(target.src)) {
+            return vp.createVariableImage(target.src);
+        }
         return new Promise((resolve, reject) => {
             const imgType = this.getImageExtension(target.src);
             if (imgType === 'svg') {

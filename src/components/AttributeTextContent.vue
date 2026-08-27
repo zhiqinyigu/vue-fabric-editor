@@ -2,6 +2,7 @@
 import {
   reactive,
   ref,
+  computed,
   getCurrentInstance,
   onMounted,
   onBeforeUnmount,
@@ -33,6 +34,10 @@ export default {
       showPathAttr: false,
       d: '',
     });
+    // 当前文本是否含模板变量占位符，用于高亮提示
+    const hasVariable = computed(() =>
+      canvasEditor.containsVariable ? canvasEditor.containsVariable(baseAttr.text) : false
+    );
     const getObjectAttr = (e) => {
       const activeObject = canvasEditor.canvas.getActiveObject();
       // 不是当前obj，跳过
@@ -134,6 +139,7 @@ export default {
       isOne,
       isMatchType,
       baseAttr,
+      hasVariable,
       changeCommon,
       showPathEditor,
       openPathEditor,
@@ -148,6 +154,11 @@ export default {
     <AttrField editable>
       <Input v-model="baseAttr.text" @on-change="changeCommon('text', baseAttr.text)"></Input>
     </AttrField>
+
+    <div v-if="hasVariable" class="variable-tip" style="margin-top: 10px">
+      <Icon type="ios-pricetags" size="13" />
+      {{ $t('variable.text_has_variable') }}
+    </div>
 
     <template v-if="baseAttr.showPathAttr">
       <Divider plain orientation="left"><h4>文本路径</h4></Divider>
@@ -177,12 +188,6 @@ export default {
         <template #right>
           <Button size="small" type="primary" @click="openPathEditor">编辑</Button>
         </template>
-
-        <PathEditorDialog
-          v-model="showPathEditor"
-          :initial-path="baseAttr.d"
-          @apply="onApplyFromEditor"
-        />
       </AttrField>
     </template>
 
@@ -196,4 +201,17 @@ export default {
 
 <style scoped lang="less">
 @import './attrPanel/attrPanel.less';
+
+.variable-tip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: -4px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #2d8cf0;
+  background: #e8f3ff;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
 </style>

@@ -17,6 +17,8 @@ class ContextMenu {
         this.parent = null;
         this.submenus = [];
         this.items = items;
+        // 是否允许显示右键菜单（预览等模式下置为 false）
+        this.enabled = true;
         this._onclick = (e) => {
             if (this.dom &&
                 e.target != this.dom &&
@@ -28,6 +30,7 @@ class ContextMenu {
         };
         this._oncontextmenu = (e) => {
             e.preventDefault();
+            if (!this.enabled) return;
             if (e.target != this.dom &&
                 e.target.parentElement != this.dom &&
                 !e.target.classList.contains('item') &&
@@ -40,6 +43,7 @@ class ContextMenu {
             if (e.keyCode != 93)
                 return;
             e.preventDefault();
+            if (!this.enabled) return;
             this.hideAll();
             this.show(e.clientX, e.clientY);
         };
@@ -203,6 +207,10 @@ class ContextMenu {
     }
     setData(data) {
         this.items = data;
+    }
+    // 动态启停右键菜单（预览等模式禁用）
+    setEnabled(enabled) {
+        this.enabled = !!enabled;
     }
     uninstall() {
         this.dom = null;

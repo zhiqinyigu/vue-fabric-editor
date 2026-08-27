@@ -40,6 +40,8 @@ export { default as ResizePlugin } from './plugin/ResizePlugin';
 export { default as LockPlugin } from './plugin/LockPlugin';
 export { default as AddBaseTypePlugin } from './plugin/AddBaseTypePlugin';
 export { default as TextClipPlugin } from './plugin/TextClipPlugin';
+export { default as VariablePlugin } from './plugin/VariablePlugin';
+export * from './variableEngine';
 import EventType from './eventType';
 import Utils from './utils/utils';
 import CustomRect from './objects/CustomRect';

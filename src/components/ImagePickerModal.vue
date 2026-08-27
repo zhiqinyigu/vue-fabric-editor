@@ -127,7 +127,7 @@ export default {
       pickerState.mode === 'background' ? $t('bgSeting.image') : $t('insertFile.insert_picture')
     );
 
-    // 每次打开重置输入状态
+    // 每次打开重置输入状态，并回显当前图片地址（在线 URL / 变量）
     watch(
       () => pickerState.open,
       (v) => {
@@ -139,6 +139,33 @@ export default {
       activeTab.value = 'local';
       url.value = '';
       convertToLocal.value = false;
+      const current = getCurrentSrc();
+      if (current) {
+        url.value = current;
+        activeTab.value = 'url';
+      }
+    };
+    // 取"当前编辑对象"的在线地址/变量 src 用于回显：
+    // - 背景模式：读 WorkspacePlugin.getBackgroundImage
+    // - 插入/更换元素：读当前选中图片对象（getSrc 对变量图返回变量 URL）
+    const getCurrentSrc = () => {
+      try {
+        const active = canvasEditor.canvas && canvasEditor.canvas.getActiveObject();
+        if (active && active.type === 'image' && active.getSrc) {
+          const src = active.getSrc();
+          return isValidPrefill(src) ? src : '';
+        }
+      } catch (e) {
+        // 忽略取值异常（如无选中对象）
+      }
+      return '';
+    };
+    // 仅回显 http(s) / 变量占位 URL；data:/blob: 本地图不回显
+    const isValidPrefill = (src) => {
+      if (typeof src !== 'string' || !src) return false;
+      if (/^data:/i.test(src) || /^blob:/i.test(src)) return false;
+      if (/^(https?:)?\/\//i.test(src)) return true;
+      return !!(canvasEditor.containsVariable && canvasEditor.containsVariable(src));
     };
 
     // ===== 结果分发与关闭 =====
@@ -211,8 +238,28 @@ export default {
         Message.error($t('insertFile.insert_online_image_empty'));
         return;
       }
-      if (!/^https?:\/\/.+$/i.test(src)) {
+      // 变量 URL（含 {{var}} 包裹符）合法，无需 http:// 前缀（与 AttributeOnlineImg 行为一致）
+      const isVariableUrl = !!(canvasEditor.containsVariable && canvasEditor.containsVariable(src));
+      if (!isVariableUrl && !/^https?:\/\/.+$/i.test(src)) {
         Message.error($t('insertFile.insert_online_image_invalid'));
+        return;
+      }
+      // 模板变量仅对"插入元素"生效（背景当作普通URL处理）
+      if (isVariableUrl && pickerState.mode !== 'background') {
+        Message.info($t('variable.url_is_dynamic'));
+        if (convertToLocal.value) {
+          Message.warning($t('variable.cannot_convert_local'));
+          convertToLocal.value = false;
+        }
+        try {
+          const imgItem = await canvasEditor.createVariableImage(src);
+          canvasEditor.addBaseType(imgItem, { scale: true });
+        } catch (e) {
+          Message.error($t('insertFile.insert_online_image_error'));
+          return;
+        }
+        resetInputs();
+        closeImagePicker();
         return;
       }
       try {

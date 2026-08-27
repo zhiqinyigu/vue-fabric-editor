@@ -142,7 +142,7 @@ class Editor extends EventEmitter {
     }
     // 渲染右键菜单
     _renderMenu(opt, menu) {
-        if (menu.length !== 0 && this.contextMenu) {
+        if (menu.length !== 0 && this.contextMenu && this.contextMenu.enabled) {
             this.contextMenu.hideAll();
             this.contextMenu.setData(menu);
             this.contextMenu.show(opt.e.clientX, opt.e.clientY);

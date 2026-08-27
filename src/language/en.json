@@ -231,5 +231,25 @@
   "cancel": "Cancel",
   "cleanUp": "Clean up",
   "variable": {
+    "title": "Variable Config",
+    "open": "Variable Config",
+    "delimiter_title": "Variable Delimiter",
+    "delimiter_changed": "Delimiter changed. The mapping table has been recollected with the new delimiter.",
+    "start": "Start",
+    "end": "End",
+    "example": "Example",
+    "apply": "Apply",
+    "testdata_title": "Test Data Mapping",
+    "no_variable": "No template variable found. You can type {{var}} in text content or image URL.",
+    "input_test_value": "Input a test value",
+    "variable": "Variable",
+    "test_value": "Test Value",
+    "preview": "Apply & Preview",
+    "restore": "Exit Preview & Restore",
+    "previewing": "Currently previewing with test data, won't affect template saving",
+    "close": "Close",
+    "text_has_variable": "This text contains template variables, will be rendered with data on frontend",
+    "url_is_dynamic": "This URL is a dynamic variable image, rendered with data on frontend; showing placeholder now",
+    "cannot_convert_local": "URLs with variables cannot be converted to local images, otherwise variables will be lost"
   }
 }
