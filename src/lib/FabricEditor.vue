@@ -142,6 +142,7 @@ import { createExtensionManager } from './extensionManager';
 import { createEditorApi } from './api';
 import { provideEditorContext } from '@/hooks/useEditorContext';
 import { useI18n } from '@/hooks/useI18n';
+import { installImageRenderGuard } from '@/core/patchImageRender';
 
 import TopbarImport from './components/TopbarImport.vue';
 import RightPanel from '@/views/home/components/right/index.vue';
@@ -174,6 +175,8 @@ export default {
     adapters: { type: Object, default: () => ({}) },
     extensions: { type: Array, default: () => [] },
     options: { type: Object, default: () => ({}) },
+    // 强制远程图片模式：隐藏/禁用本地图片上传与"在线图转base64"，图片一律以远程URL入库
+    remoteImageMode: { type: Boolean, default: false },
     // 文字元素的默认内容（替代原 i18n everything_is_fine / everything_goes_well）
     defaultText: { type: String, default: '新建文本' },
     defaultTextbox: { type: String, default: '新建文本' },
@@ -195,6 +198,7 @@ export default {
     const registry = createAdapterRegistry();
     const ui = createUiRegistry();
     const editor = new Editor();
+    editor.options = props.options;
     const ctx = {
       canvas: null,
       editor,
@@ -204,6 +208,7 @@ export default {
       api: null,
       t,
       options: props.options,
+      remoteImageMode: props.remoteImageMode,
     };
     const extensions = createExtensionManager({ registry, ui });
     extensions.setContext(ctx);
@@ -263,6 +268,8 @@ export default {
 
     // ---- 画布初始化 ----
     const initCanvas = () => {
+      // 0 尺寸图片元素跳过绘制，避免单张坏图（未完成加载/加载失败）拖垮整画布
+      installImageRenderGuard();
       const canvasEl = document.getElementById(canvasId);
       const canvas = new fabric.Canvas(canvasEl, {
         fireRightClick: true,

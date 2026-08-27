@@ -1,15 +1,13 @@
-import EventEmitter from 'events';
 import hotkeys from 'hotkeys-js';
 import ContextMenu from './ContextMenu.js';
 import ServersPlugin from './ServersPlugin';
-import { AsyncSeriesHook } from 'tapable';
 import Utils from './utils/utils';
-class Editor extends EventEmitter {
+import PluginEngine from './PluginEngine';
+class Editor extends PluginEngine {
     constructor() {
         super(...arguments);
         this.canvas = null;
         this.contextMenu = null;
-        this.pluginMap = {};
         // 自定义事件
         this.customEvents = [];
         // 自定义API
@@ -22,10 +20,10 @@ class Editor extends EventEmitter {
             'hookSaveAfter',
             'hookTransform',
         ];
-        this.hooksEntity = {};
     }
     init(canvas) {
         this.canvas = canvas;
+        this.pluginMap = {};
         this._initContextMenu();
         this._bindContextMenu();
         this._initActionHooks();
@@ -39,11 +37,7 @@ class Editor extends EventEmitter {
     use(plugin, options) {
         if (this._checkPlugin(plugin) && this.canvas) {
             this._saveCustomAttr(plugin);
-            const pluginRunTime = new plugin(this.canvas, this, options || {});
-            // 添加插件名称
-            pluginRunTime.pluginName = plugin.pluginName;
-            this.pluginMap[plugin.pluginName] = pluginRunTime;
-            this._bindingHooks(pluginRunTime);
+            const pluginRunTime = this._bindPlugin(plugin, options);
             this._bindingHotkeys(pluginRunTime);
             this._bindingApis(pluginRunTime);
         }
@@ -52,16 +46,9 @@ class Editor extends EventEmitter {
     destory() {
         this.canvas = null;
         this.contextMenu = null;
-        this.pluginMap = {};
         this.customEvents = [];
         this.customApis = [];
-        this.hooksEntity = {};
-    }
-    // 获取插件
-    getPlugin(name) {
-        if (this.pluginMap[name]) {
-            return this.pluginMap[name];
-        }
+        super.destroy();
     }
     // 检查组件
     _checkPlugin(plugin) {
@@ -82,21 +69,7 @@ class Editor extends EventEmitter {
         });
         return true;
     }
-    // 绑定hooks方法
-    _bindingHooks(plugin) {
-        this.hooks.forEach((hookName) => {
-            const hook = plugin[hookName];
-            if (hook) {
-                this.hooksEntity[hookName].tapPromise(plugin.pluginName + hookName, function () {
-                    // console.log(hookName, ...arguments);
-                    // eslint-disable-next-line prefer-rest-params
-                    const result = hook.apply(plugin, [...arguments]);
-                    // hook 兼容非 Promise 返回值
-                    return result instanceof Promise ? result : Promise.resolve(result);
-                });
-            }
-        });
-    }
+    // 绑定hooks方法（已抽取至 BindPluginHooks / PluginEngine 共享，供渲染器复用）
     // 绑定快捷键
     _bindingHotkeys(plugin) {
         var _a;
@@ -148,11 +121,9 @@ class Editor extends EventEmitter {
             this.contextMenu.show(opt.e.clientX, opt.e.clientY);
         }
     }
-    // 生命周期事件
+    // 生命周期事件（hooksEntity 由 PluginEngine._initHooks 创建）
     _initActionHooks() {
-        this.hooks.forEach((hookName) => {
-            this.hooksEntity[hookName] = new AsyncSeriesHook(['data']);
-        });
+        this._initHooks(this.hooks);
     }
     _initContextMenu() {
         this.contextMenu = new ContextMenu(this.canvas.wrapperEl, []);
@@ -160,11 +131,6 @@ class Editor extends EventEmitter {
     }
     _initServersPlugin() {
         this.use(ServersPlugin);
-    }
-    // 解决 listener 为 undefined 的时候卸载错误
-    off(eventName, listener) {
-        // noinspection TypeScriptValidateTypes
-        return listener ? super.off(eventName, listener) : this;
     }
 }
 export default Editor;

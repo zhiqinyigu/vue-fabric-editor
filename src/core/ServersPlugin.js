@@ -9,6 +9,7 @@ import { v4 as uuid } from 'uuid';
 import { selectFiles, clipboardText, downFile } from './utils/utils';
 import { fabric } from 'fabric';
 import { SelectEvent, SelectMode } from './eventType';
+import { stripDefaultFields, stripCanvasDefaults, normalizeCanvasDefaults, patchImageCrossOrigin } from './jsonOptimizer';
 function transformText(objects) {
     if (!objects)
         return;
@@ -80,9 +81,22 @@ class ServersPlugin {
             }
         });
     }
-    async loadJSON(jsonFile, callback) {
+    async loadJSON(jsonFile, callback, crossOrigin = 'anonymous') {
+        if (this._engineDestroyed()) {
+            callback && callback();
+            return;
+        }
         // 确保元素存在id
         const temp = typeof jsonFile === 'string' ? JSON.parse(jsonFile) : jsonFile;
+        // 资源清单还原：assetId 引用 -> 内联 src（供 hookTransform / loadFromJSON 使用）
+        this._expandAssetManifest(temp);
+        // 精简 JSON 缺省字段补回（与 getJson 的 strip 对称，保证 1:1 还原）
+        normalizeCanvasDefaults(temp);
+        // 远程图片补 crossOrigin，避免 canvas 被污染导致 toDataURL 导出 SecurityError。
+        // 后端不支持 CORS 时可传 null 关闭（此时仅可显示、不可导出）。
+        if (crossOrigin) {
+            patchImageCrossOrigin(temp, crossOrigin);
+        }
         const textPaths = [];
         temp.objects.forEach((item) => {
             !item.id && (item.id = uuid());
@@ -95,9 +109,17 @@ class ServersPlugin {
         // hookTransform遍历
         const tempTransform = await this._transform(temp);
         jsonFile = JSON.stringify(tempTransform);
+        if (this._engineDestroyed()) {
+            callback && callback();
+            return;
+        }
         // 加载前钩子
         this.editor.hooksEntity.hookImportBefore.callAsync(jsonFile, () => {
             this.canvas.loadFromJSON(jsonFile, () => {
+                if (this._engineDestroyed()) {
+                    callback && callback();
+                    return;
+                }
                 // 把i-text对应的path加上
                 this.renderITextPath(textPaths);
                 this.canvas.renderAll();
@@ -125,14 +147,24 @@ class ServersPlugin {
         }
         return json;
     }
+  // 引擎销毁检测：组件卸载/页面切换会 destroy 引擎（hooksEntity 清空），而 loadJSON
+  // 是"加载背景图可达数秒"的异步管线，中途引擎被销毁时继续走 hook 会抛
+  // "Cannot read properties of undefined (reading 'callAsync')"（确认应用切换弹窗视图即触发）。
+  // 各异步边界检查此标记，静默放弃后续加载（callback 照常回执，调用方 Promise 正常收口）
+    _engineDestroyed() {
+        const hooks = this.editor && this.editor.hooksEntity;
+        return !this.editor || this.editor.destroyed === true || !hooks || !hooks.hookTransform;
+    }
+
     promiseCallAsync(item) {
         return new Promise((resolve) => {
+            if (this._engineDestroyed()) return resolve(item);
             this.editor.hooksEntity.hookTransform.callAsync(item, () => {
                 resolve(item);
             });
         });
     }
-    getJson() {
+    getJson(complete = false) {
         // 保存/导出模板 JSON 前，强制退出变量预览，确保使用原始占位符
         const vp = this.editor.getPlugin('VariablePlugin');
         vp && vp.exitPreview && vp.exitPreview();
@@ -142,7 +174,109 @@ class ServersPlugin {
         if (vp && vp.getVariableMeta) {
             json.variableMeta = vp.getVariableMeta();
         }
+        // 完整导出（saveJson 下载 JSON 文件）：不精简易读，缩进/格式由调用方负责
+        if (complete) {
+            return json;
+        }
+        // 最小化导出（clipboard / 运营后台保存）：
+        // 二维码/条形码不再保存 base64：仅保留 extension 参数，渲染时按参数动态生成
+        this._stripGeneratedSrc(json);
+        // 剔除等于默认值的字段，缩小 JSON 体积（渲染端 loadJSON 对称补回）
+        stripCanvasDefaults(json);
+        // 资源去重：重复图片（相同 src）提升为顶层 assets 清单，以 assetId 引用
+        if (this._useAssetManifest()) {
+            this._applyAssetManifest(json);
+        }
+        // example 为编辑端测试值，仅在完整导出时保留；最小化导出排除（由导出管线控制）
+        if (Array.isArray(json.variableMeta && json.variableMeta.variables)) {
+            json.variableMeta.variables.forEach((v) => delete v.example);
+        }
         return json;
+    }
+    // 是否启用资源清单去重（可通过 editor.options.useAssetManifest 开启）
+    _useAssetManifest() {
+        return !!(this.editor && this.editor.options && this.editor.options.useAssetManifest);
+    }
+    // 删除二维码/条形码对象中由生成函数产生的 base64 src（递归，含 group.objects）
+    _stripGeneratedSrc(json) {
+        const strip = (items) => {
+            if (!Array.isArray(items)) return;
+            items.forEach((item) => {
+                if (!item || typeof item !== 'object') return;
+                if (item.extensionType === 'qrcode' || item.extensionType === 'barcode') {
+                    delete item.src;
+                }
+                if (Array.isArray(item.objects)) strip(item.objects);
+            });
+        };
+        if (json && Array.isArray(json.objects)) strip(json.objects);
+        return json;
+    }
+    // 资源去重：把"重复出现 ≥2 次的相同图片 src"提升为顶层 assets 清单，
+    // 对象改为 assetId 引用（不内联 src），供渲染器统一加载与缓存。
+    // 唯一 src（只出现一次）保持内联，避免清单反而膨胀。
+    _applyAssetManifest(json) {
+        if (!json || !Array.isArray(json.objects)) return;
+        const count = new Map();
+        const walk = (items) => {
+            if (!Array.isArray(items)) return;
+            items.forEach((item) => {
+                if (!item || typeof item !== 'object') return;
+                if (item.type === 'image' && typeof item.src === 'string' && item.src) {
+                    count.set(item.src, (count.get(item.src) || 0) + 1);
+                }
+                if (Array.isArray(item.objects)) walk(item.objects);
+            });
+        };
+        walk(json.objects);
+        const assets = [];
+        const idOf = new Map();
+        let idx = 0;
+        for (const [src, c] of count) {
+            if (c >= 2) {
+                const id = `asset_${idx++}`;
+                assets.push({ id, url: src });
+                idOf.set(src, id);
+            }
+        }
+        if (!assets.length) return;
+        json.assets = assets;
+        const replace = (items) => {
+            if (!Array.isArray(items)) return;
+            items.forEach((item) => {
+                if (!item || typeof item !== 'object') return;
+                if (item.type === 'image' && typeof item.src === 'string') {
+                    const id = idOf.get(item.src);
+                    if (id) {
+                        delete item.src;
+                        item.assetId = id;
+                    }
+                }
+                if (Array.isArray(item.objects)) replace(item.objects);
+            });
+        };
+        replace(json.objects);
+    }
+    // 资源清单还原：assetId 引用 -> 内联 src（loadJSON 加载前调用）
+    _expandAssetManifest(json) {
+        if (!json || !Array.isArray(json.assets)) return;
+        const map = new Map(json.assets.map((a) => [a && a.id, a && a.url]));
+        const expand = (items) => {
+            if (!Array.isArray(items)) return;
+            items.forEach((item) => {
+                if (!item || typeof item !== 'object') return;
+                if (item.assetId != null && typeof item.src !== 'string') {
+                    const url = map.get(item.assetId);
+                    if (typeof url === 'string') {
+                        item.src = url;
+                        // 还原为内联形式后清理引用标记，避免二次序列化残留
+                        delete item.assetId;
+                    }
+                }
+                if (Array.isArray(item.objects)) expand(item.objects);
+            });
+        };
+        if (Array.isArray(json.objects)) expand(json.objects);
     }
     getExtensionKey() {
         return [
@@ -156,6 +290,7 @@ class ServersPlugin {
             'verticalAlign',
             'roundValue',
             'backgroundImageMode',
+            'backgroundPosition',
             'isVariableImage',
             'follow',
         ];
@@ -199,13 +334,17 @@ class ServersPlugin {
             return Promise.resolve(false);
         }
         const json = activeObject.toJSON(['id', 'gradientAngle', 'selectable', 'hasControls']);
+        // 与 getJson 保持一致：二维码/条形码不携带生成的 base64，缺省字段一并精简
+        this._stripGeneratedSrc(json);
+        stripDefaultFields(json);
         return clipboardText(JSON.stringify(json)).then(() => true);
     }
     async saveJson() {
-        const dataUrl = this.getJson();
+        // 下载 JSON 文件：完整导出（不精简、保留 example），缩进 2 空格
+        const dataUrl = this.getJson(true);
         // 把文本text转为textgroup，让导入可以编辑
         await transformText(dataUrl.objects);
-        const fileStr = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(dataUrl))}`;
+        const fileStr = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(dataUrl, null, 2))}`;
         downFile(fileStr, 'json');
     }
     saveSvg() {
@@ -221,9 +360,9 @@ class ServersPlugin {
             });
         });
     }
-    saveImg() {
+    saveImg(multiplier = 1) {
         this.editor.hooksEntity.hookSaveBefore.callAsync('', () => {
-            const option = this._getSaveOption();
+            const option = this._getSaveOption(multiplier);
             this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
             const dataUrl = this.canvas.toDataURL(option);
             this.editor.hooksEntity.hookSaveAfter.callAsync(dataUrl, () => {
@@ -231,10 +370,10 @@ class ServersPlugin {
             });
         });
     }
-    preview() {
+    preview(multiplier = 1) {
         return new Promise((resolve) => {
             this.editor.hooksEntity.hookSaveBefore.callAsync('', () => {
-                const option = this._getSaveOption();
+                const option = this._getSaveOption(multiplier);
                 this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
                 this.canvas.renderAll();
                 const dataUrl = this.canvas.toDataURL(option);
@@ -273,7 +412,7 @@ class ServersPlugin {
             },
         };
     }
-    _getSaveOption() {
+    _getSaveOption(multiplier = 1) {
         const workspace = this.canvas
             .getObjects()
             .find((item) => item.id === 'workspace');
@@ -283,6 +422,7 @@ class ServersPlugin {
             name: 'New Image',
             format: 'png',
             quality: 1,
+            multiplier,
             width,
             height,
             left,

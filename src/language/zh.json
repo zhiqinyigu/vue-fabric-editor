@@ -13,6 +13,7 @@
     "cover": "填满",
     "contain": "完整",
     "tile": "平铺",
+    "position": "对齐方式",
     "opacity": "透明度",
     "fitCanvas": "同步画布尺寸",
     "uploadTip": "点击选择背景图片"
@@ -173,6 +174,7 @@
     "insert_online_image_upload_btn": "选择本地图片上传",
     "insert_online_image_upload_success": "上传成功，已回填地址",
     "insert_online_image_upload_error": "上传失败",
+    "insert_online_image_remote_only": "当前为远程图片模式，本地图片已禁用，请使用在线URL或上传到CDN",
     "insert_SVG": "插入SVG元素",
     "insert_SVG_label": "SVG",
     "insert_SVGStr": "插入SVG字符",

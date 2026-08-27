@@ -53,6 +53,24 @@
               <Option value="tile">{{ $t('bgSeting.tile') }}</Option>
             </Select>
           </FormItem>
+          <FormItem :label="$t('bgSeting.position')">
+            <div class="bg-align-grid">
+              <div
+                v-for="pos in positions"
+                :key="pos.x + '-' + pos.y"
+                :class="[
+                  'bg-align-cell',
+                  {
+                    active: bgPosition.x === pos.x && bgPosition.y === pos.y,
+                    disabled: bgMode === 'tile',
+                  },
+                ]"
+                @click="bgMode !== 'tile' && setBgPosition(pos.x, pos.y)"
+              >
+                <i class="bg-align-dot" :style="dotStyle(pos)"></i>
+              </div>
+            </div>
+          </FormItem>
           <FormItem :label="$t('bgSeting.opacity')">
             <Slider
               v-model="bgOpacity"
@@ -100,13 +118,33 @@ export default {
     // ===== 背景图片 =====
     const bgImageUrl = ref('');
     const bgMode = ref('cover');
+    const bgPosition = ref({ x: 0.5, y: 0.5 }); // 对齐系数：0=起始 / 0.5=居中 / 1=末尾
     const bgOpacity = ref(100);
+
+    // 对齐 3×3 网格
+    const positions = [
+      { x: 0, y: 0 },
+      { x: 0.5, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 0.5 },
+      { x: 0.5, y: 0.5 },
+      { x: 1, y: 0.5 },
+      { x: 0, y: 1 },
+      { x: 0.5, y: 1 },
+      { x: 1, y: 1 },
+    ];
+    // 网格内小点随对齐位置偏移（clamp 到点半径内保证贴边不越界）
+    const dotStyle = (pos) => ({
+      top: `clamp(4px, ${pos.y * 100}%, calc(100% - 4px))`,
+      left: `clamp(4px, ${pos.x * 100}%, calc(100% - 4px))`,
+      transform: 'translate(-50%, -50%)',
+    });
 
     // 打开统一图片来源选择器，将选中的图片设为背景
     const applyBackgroundSrc = (src) => {
       if (!src) return;
       bgImageUrl.value = src;
-      canvasEditor.setBackgroundImage(src, bgMode.value);
+      canvasEditor.setBackgroundImage(src, bgMode.value, bgPosition.value);
       canvasEditor.setBackgroundOpacity(bgOpacity.value);
     };
     const openBackgroundImage = () => {
@@ -128,8 +166,14 @@ export default {
 
     const changeBgMode = (mode) => {
       if (bgImageUrl.value) {
-        canvasEditor.setBackgroundImage(bgImageUrl.value, mode);
+        canvasEditor.setBackgroundImage(bgImageUrl.value, mode, bgPosition.value);
       }
+    };
+
+    // 就地更新背景对齐方式（不重载图片）
+    const setBgPosition = (x, y) => {
+      bgPosition.value = { x, y };
+      canvasEditor.setBackgroundPosition(x, y);
     };
 
     const changeBgOpacity = (val) => {
@@ -302,6 +346,8 @@ export default {
       if (bgInfo && bgInfo.src) {
         bgImageUrl.value = bgInfo.src;
         bgMode.value = bgInfo.mode || 'cover';
+        const p = bgInfo.position;
+        bgPosition.value = p && p.x != null ? p : { x: 0.5, y: 0.5 };
         bgOpacity.value = Math.round((bgInfo.opacity != null ? bgInfo.opacity : 1) * 100);
       } else {
         bgImageUrl.value = '';
@@ -312,6 +358,7 @@ export default {
     const handleClear = () => {
       bgImageUrl.value = '';
       bgMode.value = 'cover';
+      bgPosition.value = { x: 0.5, y: 0.5 };
       bgOpacity.value = 100;
     };
 
@@ -336,11 +383,15 @@ export default {
       applyBackgroundColor,
       bgImageUrl,
       bgMode,
+      bgPosition,
       bgOpacity,
+      positions,
+      dotStyle,
       openBackgroundImage,
       applyBackgroundSrc,
       removeBgImage,
       changeBgMode,
+      setBgPosition,
       changeBgOpacity,
       fitCanvasToBg,
     };
@@ -451,6 +502,42 @@ export default {
   /deep/ .ivu-form-item-content .ivu-select {
     width: 100%;
   }
+}
+// 对齐方式：3×3 网格，小点随对齐位置偏移
+.bg-align-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 30px);
+  gap: 4px;
+  width: fit-content;
+}
+.bg-align-cell {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #dcdee2;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  &:hover {
+    border-color: #2d8cf0;
+    background: #f6faff;
+  }
+  &.active {
+    border-color: #2d8cf0;
+    background: #eaf4ff;
+  }
+  &.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+.bg-align-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2d8cf0;
 }
 .color-list {
   display: flex;

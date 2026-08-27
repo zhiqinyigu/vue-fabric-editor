@@ -13,6 +13,7 @@
     "cover": "Cover",
     "contain": "Contain",
     "tile": "Tile",
+    "position": "Position",
     "opacity": "Opacity",
     "fitCanvas": "Sync canvas size",
     "uploadTip": "Click to choose a background image"
@@ -173,6 +174,7 @@
     "insert_online_image_upload_btn": "Choose a local image to upload",
     "insert_online_image_upload_success": "Uploaded, URL filled back",
     "insert_online_image_upload_error": "Upload failed",
+    "insert_online_image_remote_only": "Remote-image mode is enabled: local images are disabled, please use an online URL or upload to CDN",
     "insert_SVG": "Insert SVG",
     "insert_SVG_label": "SVG",
     "insert_SVGStr": "Insert SVG String",

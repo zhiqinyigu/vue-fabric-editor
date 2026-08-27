@@ -17,8 +17,8 @@
     @on-cancel="onCancel"
   >
     <Tabs v-model="activeTab">
-      <!-- 本地图片 -->
-      <TabPane :label="$t('insertFile.insert_local_image')" name="local">
+      <!-- 本地图片（远程模式隐藏，禁止本地转base64） -->
+      <TabPane v-if="!remoteImageMode" :label="$t('insertFile.insert_local_image')" name="local">
         <div
           class="local-upload"
           :class="{ 'is-dragover': dragging }"
@@ -66,7 +66,7 @@
       </TabPane>
     </Tabs>
 
-    <div v-if="activeTab === 'url'" class="online-img-option">
+    <div v-if="activeTab === 'url' && !remoteImageMode" class="online-img-option">
       <Checkbox v-model="convertToLocal">
         {{ $t('insertFile.insert_online_image_convert') }}
       </Checkbox>
@@ -82,6 +82,7 @@ import useImagePicker from '@/hooks/useImagePicker';
 import { useEditorContext } from '@/hooks/useEditorContext';
 import useSelect from '@/hooks/select';
 import { useI18n } from '@/hooks/useI18n';
+import { normalizeAssetUrl } from '@/core/assetUrl';
 
 // 将在线图片转为本地 base64（drawImage 到临时 canvas 后 toDataURL）
 function urlToBase64(url) {
@@ -109,12 +110,12 @@ export default {
   name: 'ImagePickerModal',
   setup() {
     const { pickerState, closeImagePicker } = useImagePicker();
-    const { registry } = useEditorContext();
+    const { registry, remoteImageMode } = useEditorContext();
     const { canvasEditor } = useSelect();
     const { t } = useI18n();
     const $t = (key) => t(key);
 
-    const activeTab = ref('local');
+    const activeTab = ref(remoteImageMode ? 'url' : 'local');
     const url = ref('');
     const convertToLocal = ref(false);
     const localInput = ref(null);
@@ -136,7 +137,7 @@ export default {
     );
 
     const resetInputs = () => {
-      activeTab.value = 'local';
+      activeTab.value = remoteImageMode ? 'url' : 'local';
       url.value = '';
       convertToLocal.value = false;
       const current = getCurrentSrc();
@@ -184,6 +185,11 @@ export default {
       localInput.value && localInput.value.click();
     };
     const addLocalFiles = (files) => {
+      // 远程图片模式下禁用本地图片（禁止本地 base64 入库）
+      if (remoteImageMode) {
+        Message.error($t('insertFile.insert_online_image_remote_only'));
+        return;
+      }
       const images = Array.from(files || []).filter((f) => f.type && f.type.startsWith('image/'));
       if (images.length === 0) return;
       if (pickerState.mode === 'background') {
@@ -264,10 +270,14 @@ export default {
       }
       try {
         let finalSrc = src;
-        if (convertToLocal.value) {
+        // 远程模式下强制保留远程 URL（禁止转 base64）
+        if (convertToLocal.value && !remoteImageMode) {
           finalSrc = await urlToBase64(src);
+        } else {
+          // 规范化远程 URL（trim / 补全协议），data: 与含变量占位符的 URL 原样保留
+          finalSrc = normalizeAssetUrl(src);
         }
-        runDone(finalSrc, { local: convertToLocal.value });
+        runDone(finalSrc, { local: convertToLocal.value && !remoteImageMode });
       } catch (e) {
         Message.error($t('insertFile.insert_online_image_error'));
         return;
@@ -289,6 +299,7 @@ export default {
     return {
       pickerState,
       modalTitle,
+      remoteImageMode,
       activeTab,
       url,
       convertToLocal,

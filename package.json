@@ -18,6 +18,7 @@
     "build:staging": "vue-cli-service build --mode staging",
     "build:prod": "vue-cli-service build --mode production",
     "build:lib": "vue-cli-service build --target lib --name vue-fabric-editor src/lib/index.js",
+    "build:lib:renderer": "vue-cli-service build --target lib --name poster-renderer src/lib/renderer.js",
     "lint": "vue-cli-service lint",
     "test": "jest",
     "test:layer": "node test-layer.js"

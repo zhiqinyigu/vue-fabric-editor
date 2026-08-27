@@ -31,6 +31,10 @@ const routes = [
     path: '/demo',
     component: () => import('@/views/demo/index.vue'),
   },
+  {
+    path: '/renderer-demo',
+    component: () => import('@/views/renderer-demo/index.vue'),
+  },
 ];
 
 export default routes;

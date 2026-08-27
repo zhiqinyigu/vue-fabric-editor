@@ -6,8 +6,7 @@
  * @Description: 二维码生成工具
  */
 import { fabric } from 'fabric';
-import QRCodeStyling from 'qr-code-styling';
-import { blobToBase64 } from '../utils/utils';
+import { generateQrCodeDataURL, qrParamsToOption } from '../generators';
 // 二维码生成参数
 var DotsType;
 (function (DotsType) {
@@ -44,18 +43,15 @@ class QrCodePlugin {
     }
     async hookTransform(object) {
         if (object.extensionType === 'qrcode') {
+            // 无参数（或旧数据仅有 src）时保留现有 src，避免渲染失败
+            if (!object.extension || typeof object.extension.data !== 'string') return;
             const paramsOption = this._paramsToOption(object.extension);
             const url = await this._getBase64Str(paramsOption);
             object.src = url;
         }
     }
     async _getBase64Str(options) {
-        const qrCode = new QRCodeStyling(options);
-        const blob = await qrCode.getRawData('png');
-        if (!blob)
-            return '';
-        const base64Str = (await blobToBase64(blob));
-        return base64Str || '';
+        return generateQrCodeDataURL(options);
     }
     _defaultBarcodeOption() {
         const defaultData = (this.options && this.options.defaultData) || 'https://example.com';
@@ -74,35 +70,7 @@ class QrCodePlugin {
         };
     }
     _paramsToOption(option) {
-        return {
-            width: option.width,
-            height: option.width,
-            type: 'canvas',
-            data: option.data,
-            margin: option.margin,
-            qrOptions: {
-                errorCorrectionLevel: option.errorCorrectionLevel,
-            },
-            // 点
-            dotsOptions: {
-                color: option.dotsColor,
-                type: option.dotsType,
-            },
-            // 三个角
-            cornersSquareOptions: {
-                color: option.cornersSquareColor,
-                type: option.cornersSquareType,
-            },
-            // 圆点选项
-            cornersDotOptions: {
-                color: option.cornersDotColor,
-                type: option.cornersDotType,
-            },
-            // 背景
-            backgroundOptions: {
-                color: option.background,
-            },
-        };
+        return qrParamsToOption(option);
     }
     async addQrCode() {
         const option = this._defaultBarcodeOption();

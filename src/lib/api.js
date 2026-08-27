@@ -23,10 +23,10 @@ export function createEditorApi(ctx) {
     getSize: () => editor.getWorkspase(),
     clear: () => editor.clear(),
     preview: () => editor.preview(),
-    exportFile: (type = 'json') => {
+    exportFile: (type = 'json', multiplier = 1) => {
       if (type === 'json') return editor.saveJson();
       if (type === 'svg') return editor.saveSvg();
-      if (type === 'png') return editor.saveImg();
+      if (type === 'png') return editor.saveImg(multiplier);
     },
     undo: () => editor.undo(),
     redo: () => editor.redo(),

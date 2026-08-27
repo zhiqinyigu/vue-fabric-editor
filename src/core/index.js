@@ -43,6 +43,20 @@ export { default as TextClipPlugin } from './plugin/TextClipPlugin';
 export { default as VariablePlugin } from './plugin/VariablePlugin';
 export { default as AutoGrowPlugin } from './plugin/AutoGrowPlugin';
 export * from './variableEngine';
+export { qrParamsToOption, generateQrCodeDataURL, generateBarcodeDataURL } from './generators';
+export { normalizeAssetUrl } from './assetUrl';
+export { OBJECT_DEFAULTS, getDefaultsForType } from './objectDefaults';
+export {
+  stripDefaultFields,
+  normalizeDefaultFields,
+  stripCanvasDefaults,
+  normalizeCanvasDefaults,
+  patchImageCrossOrigin,
+} from './jsonOptimizer';
+export { default as RendererCore } from './RendererCore';
+export { default as RendererWorkspacePlugin } from './plugin/RendererWorkspacePlugin';
+export { default as RendererAutoGrowPlugin } from './plugin/RendererAutoGrowPlugin';
+export { computeBackgroundLayout, cloneWorkspaceAsClip, createBackgroundObject } from './workspaceGeometry';
 import EventType from './eventType';
 import Utils from './utils/utils';
 import CustomRect from './objects/CustomRect';

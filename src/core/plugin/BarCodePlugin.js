@@ -6,7 +6,7 @@
  * @Description: 条形码生成工具
  */
 import { fabric } from 'fabric';
-import JsBarcode from 'jsbarcode';
+import { generateBarcodeDataURL } from '../generators';
 // 条形码生成参数
 // https://github.com/lindell/JsBarcode/wiki/Options
 var CodeType;
@@ -25,17 +25,14 @@ class BarCodePlugin {
     }
     async hookTransform(object) {
         if (object.extensionType === 'barcode') {
+            // 无参数（或旧数据仅有 src）时保留现有 src，避免渲染失败
+            if (!object.extension || object.extension.value == null) return;
             const url = await this._getBase64Str(object.extension);
             object.src = url;
         }
     }
     _getBase64Str(option) {
-        const canvas = document.createElement('canvas');
-        JsBarcode(canvas, option.value, {
-            ...option,
-        });
-        const url = canvas.toDataURL('image/png', 1);
-        return url;
+        return generateBarcodeDataURL(option);
     }
     _defaultBarcodeOption() {
         return {
