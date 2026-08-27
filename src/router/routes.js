@@ -35,6 +35,10 @@ const routes = [
     path: '/renderer-demo',
     component: () => import('@/views/renderer-demo/index.vue'),
   },
+  {
+    path: '/legacy-demo',
+    component: () => import('@/views/legacy-demo/index.vue'),
+  },
 ];
 
 export default routes;

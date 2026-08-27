@@ -1,0 +1,137 @@
+{
+  "background": "http://ke-test.wzhxlx.com/ceping/2024/pictures/9e38800f2d094d77bbb7abfea765af5c.png",
+  "canvasTextBaseline": "alphabetic",
+  "avatarPosition": "72,90,126",
+  "nickNamePosition": "2000,2000,#333",
+  "qrCodePosition": "842,1080,152",
+  "text": [
+    {
+      "text": "{nickname}",
+      "x": "228",
+      "y": "104",
+      "color": "#1F2229",
+      "size": "40",
+      "align": "right",
+      "lineHeight": "1",
+      "fontWeight": "bold",
+      "splitByGrapheme": false,
+      "width": "0",
+      "height": ""
+    },
+    {
+      "text": "{posterAction}",
+      "x": "228",
+      "y": "162",
+      "color": "#656A73",
+      "size": "34",
+      "align": "",
+      "lineHeight": "1",
+      "fontWeight": "",
+      "splitByGrapheme": false,
+      "width": "",
+      "height": ""
+    },
+    {
+      "text": "{textAuthor}：",
+      "x": "72",
+      "y": "266",
+      "color": "#1F2229",
+      "size": "44",
+      "align": "",
+      "lineHeight": "1.9",
+      "fontWeight": "bold",
+      "splitByGrapheme": false,
+      "width": "",
+      "height": ""
+    },
+    {
+      "text": "{text}",
+      "x": "72",
+      "y": "350",
+      "color": "#1F2229",
+      "size": "44",
+      "align": "",
+      "lineHeight": "1.9",
+      "fontWeight": "",
+      "splitByGrapheme": true,
+      "width": "936",
+      "height": "336"
+    },
+    {
+      "text": "《{courseName}》",
+      "x": "256",
+      "y": "825",
+      "color": "#1F2229",
+      "size": "40",
+      "align": "",
+      "lineHeight": "1",
+      "fontWeight": "bold",
+      "splitByGrapheme": false,
+      "width": "",
+      "height": ""
+    },
+    {
+      "text": "{periodName}",
+      "x": "277",
+      "y": "899",
+      "color": "#656A73",
+      "size": "36",
+      "align": "",
+      "lineHeight": "1",
+      "fontWeight": "",
+      "splitByGrapheme": false,
+      "width": "",
+      "height": ""
+    },
+    {
+      "text": "长按识别二维码，查看完整内容",
+      "x": "72",
+      "y": "1138",
+      "color": "#1F2229",
+      "size": "36",
+      "align": "",
+      "lineHeight": "1",
+      "fontWeight": "bold",
+      "splitByGrapheme": false,
+      "width": "",
+      "height": ""
+    }
+  ],
+  "img": [
+    {
+      "x": "104",
+      "y": "780",
+      "width": "141",
+      "height": "200",
+      "src": "{bookshelfImage}",
+      "crossOrigin": "anonymous"
+    }
+  ],
+  "jsonList": [
+    {
+      "json": "{\"type\": \"rect\",\"version\": \"3.6.6\",\"originX\": \"left\",\"originY\": \"top\",\"left\": 72,\"top\": 748,\"width\": 936,\"height\": 264,\"fill\": \"#fff\",\"stroke\": null,\"strokeWidth\": 1,\"strokeDashArray\": null,\"strokeLineCap\": \"butt\",\"strokeDashOffset\": 0,\"strokeLineJoin\": \"miter\",\"strokeMiterLimit\": 4,\"scaleX\": 1,\"scaleY\": 1,\"angle\": 0,\"flipX\": false,\"flipY\": false,\"opacity\": 1,\"shadow\": null,\"visible\": true,\"clipTo\": null,\"backgroundColor\": \"\",\"fillRule\": \"nonzero\",\"paintFirst\": \"fill\",\"globalCompositeOperation\": \"source-over\",\"transformMatrix\": null,\"skewX\": 0,\"skewY\": 0,\"rx\": 16,\"ry\": 16}",
+      "moveTo": "0"
+    },
+    {
+      "json": "{\"type\": \"rect\",\"version\": \"3.6.6\",\"originX\": \"left\",\"originY\": \"top\",\"left\": 828,\"top\": 1066,\"width\": 180,\"height\": 180,\"fill\": \"#fff\",\"stroke\": null,\"strokeWidth\": 1,\"strokeDashArray\": null,\"strokeLineCap\": \"butt\",\"strokeDashOffset\": 0,\"strokeLineJoin\": \"miter\",\"strokeMiterLimit\": 4,\"scaleX\": 1,\"scaleY\": 1,\"angle\": 0,\"flipX\": false,\"flipY\": false,\"opacity\": 1,\"shadow\": null,\"visible\": true,\"clipTo\": null,\"backgroundColor\": \"\",\"fillRule\": \"nonzero\",\"paintFirst\": \"fill\",\"globalCompositeOperation\": \"source-over\",\"transformMatrix\": null,\"skewX\": 0,\"skewY\": 0,\"rx\": 16,\"ry\": 16}",
+      "moveTo": "0"
+    },
+    {
+      "json": "{\"type\": \"triangle\",\"version\": \"5.3.0\",\"originX\": \"left\",\"originY\": \"top\",\"left\": 179,\"top\": 732,\"width\": 35,\"height\": 18,\"fill\": \"#fff\",\"stroke\": null,\"strokeWidth\": 1,\"strokeDashArray\": null,\"strokeLineCap\": \"butt\",\"strokeDashOffset\": 0,\"strokeLineJoin\": \"miter\",\"strokeUniform\": false,\"strokeMiterLimit\": 4,\"scaleX\": 1,\"scaleY\": 1,\"angle\": 0,\"flipX\": false,\"flipY\": false,\"opacity\": 1,\"shadow\": null,\"visible\": true,\"backgroundColor\": \"\",\"fillRule\": \"nonzero\",\"paintFirst\": \"fill\",\"globalCompositeOperation\": \"source-over\",\"skewX\": 0,\"skewY\": 0}",
+      "moveTo": "0"
+    },
+    {
+      "json": "{\"type\": \"triangle\",\"version\": \"5.3.0\",\"originX\": \"left\",\"originY\": \"top\",\"left\": 612,\"top\": 1150,\"width\": 21,\"height\": 16,\"fill\": \"#1F2229\",\"stroke\": null,\"strokeWidth\": 1,\"strokeDashArray\": null,\"strokeLineCap\": \"butt\",\"strokeDashOffset\": 0,\"strokeLineJoin\": \"miter\",\"strokeUniform\": false,\"strokeMiterLimit\": 4,\"scaleX\": 1,\"scaleY\": 1,\"angle\": 90,\"flipX\": false,\"flipY\": false,\"opacity\": 1,\"shadow\": null,\"visible\": true,\"backgroundColor\": \"\",\"fillRule\": \"nonzero\",\"paintFirst\": \"fill\",\"globalCompositeOperation\": \"source-over\",\"skewX\": 0,\"skewY\": 0}",
+      "moveTo": "0"
+    },
+    {
+      "json": "{\"type\": \"triangle\",\"version\": \"5.3.0\",\"originX\": \"left\",\"originY\": \"top\",\"left\": 639,\"top\": 1150,\"width\": 21,\"height\": 16,\"fill\": \"#1F2229\",\"stroke\": null,\"strokeWidth\": 1,\"strokeDashArray\": null,\"strokeLineCap\": \"butt\",\"strokeDashOffset\": 0,\"strokeLineJoin\": \"miter\",\"strokeUniform\": false,\"strokeMiterLimit\": 4,\"scaleX\": 1,\"scaleY\": 1,\"angle\": 90,\"flipX\": false,\"flipY\": false,\"opacity\": 1,\"shadow\": null,\"visible\": true,\"backgroundColor\": \"\",\"fillRule\": \"nonzero\",\"paintFirst\": \"fill\",\"globalCompositeOperation\": \"source-over\",\"skewX\": 0,\"skewY\": 0}",
+      "moveTo": "0"
+    },
+    {
+      "json": "{\"type\": \"triangle\",\"version\": \"5.3.0\",\"originX\": \"left\",\"originY\": \"top\",\"left\": 666,\"top\": 1150,\"width\": 21,\"height\": 16,\"fill\": \"#1F2229\",\"stroke\": null,\"strokeWidth\": 1,\"strokeDashArray\": null,\"strokeLineCap\": \"butt\",\"strokeDashOffset\": 0,\"strokeLineJoin\": \"miter\",\"strokeUniform\": false,\"strokeMiterLimit\": 4,\"scaleX\": 1,\"scaleY\": 1,\"angle\": 90,\"flipX\": false,\"flipY\": false,\"opacity\": 1,\"shadow\": null,\"visible\": true,\"backgroundColor\": \"\",\"fillRule\": \"nonzero\",\"paintFirst\": \"fill\",\"globalCompositeOperation\": \"source-over\",\"skewX\": 0,\"skewY\": 0}",
+      "moveTo": "0"
+    }
+  ],
+  "mode": "new"
+}

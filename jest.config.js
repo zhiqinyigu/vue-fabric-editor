@@ -1,7 +1,7 @@
 module.exports = {
   testEnvironment: 'node',
   setupFiles: ['<rootDir>/tests/setup.js'],
-  testMatch: ['<rootDir>/tests/**/*.test.js'],
+  testMatch: ['<rootDir>/tests/**/*.test.js', '<rootDir>/src/**/*.test.js'],
   moduleFileExtensions: ['js', 'json'],
   moduleNameMapper: {
     '^canvas$': '<rootDir>/tests/__mocks__/canvas.js',
