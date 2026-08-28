@@ -9,7 +9,7 @@ import { v4 as uuid } from 'uuid';
 import { selectFiles, clipboardText, downFile } from './utils/utils';
 import { fabric } from 'fabric';
 import { SelectEvent, SelectMode } from './eventType';
-import { stripDefaultFields, stripCanvasDefaults, normalizeCanvasDefaults, patchImageCrossOrigin } from './jsonOptimizer';
+import { stripDefaultFields, stripCanvasDefaults, normalizeCanvasDefaults, patchImageCrossOrigin, appendImagesCacheBustParam, removeImagesCacheBustParam } from './jsonOptimizer';
 function transformText(objects) {
     if (!objects)
         return;
@@ -97,6 +97,10 @@ class ServersPlugin {
         if (crossOrigin) {
             patchImageCrossOrigin(temp, crossOrigin);
         }
+        // 远程图片「按接入域名分片缓存」：加载前给远程 URL 追加 feDomain=当前接入域名（请求态分片，
+        // CDN 按域名分片返回 access-control-allow-* 并隔离缓存）；JSON 存储态保持干净 URL，
+        // getJson 保存时对称移除；editor.options.cacheBust 传 false 可关闭，传 { param, getValue } 可自定义
+        appendImagesCacheBustParam(temp, this.editor && this.editor.options && this.editor.options.cacheBust);
         const textPaths = [];
         temp.objects.forEach((item) => {
             !item.id && (item.id = uuid());
@@ -174,6 +178,9 @@ class ServersPlugin {
         if (vp && vp.getVariableMeta) {
             json.variableMeta = vp.getVariableMeta();
         }
+        // 移除分片缓存参数（与 loadJSON 的追加对称）：存储/导出态恢复干净 URL，
+        // 完整导出与最小化导出统一处理，保证保存的 JSON 不携带请求态参数
+        removeImagesCacheBustParam(json);
         // 完整导出（saveJson 下载 JSON 文件）：不精简易读，缩进/格式由调用方负责
         if (complete) {
             return json;

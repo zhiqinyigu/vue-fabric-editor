@@ -11,6 +11,7 @@
  * 几何计算全部复用 workspaceGeometry 纯函数，与编辑器 WorkspacePlugin 共用同一实现。
  */
 import { fabric } from 'fabric';
+import { appendCacheBustParam } from '../assetUrl';
 import {
   computeBackgroundLayout,
   cloneWorkspaceAsClip,
@@ -150,7 +151,11 @@ class RendererWorkspacePlugin {
         resolve(false);
         cb && cb(false);
       };
-      img.src = src;
+      // 请求 URL 追加「按接入域名分片缓存」参数（幂等；与编辑器 setBackgroundImage 同语义）
+      img.src = appendCacheBustParam(
+        src,
+        this.editor && this.editor.options && this.editor.options.cacheBust
+      );
     });
   }
   removeBackgroundImage() {

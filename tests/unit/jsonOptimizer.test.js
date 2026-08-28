@@ -9,20 +9,36 @@ import {
   normalizeDefaultFields,
   stripCanvasDefaults,
   normalizeCanvasDefaults,
+  appendImagesCacheBustParam,
+  removeImagesCacheBustParam,
 } from '../../src/core/jsonOptimizer';
 
 // 编辑器 getExtensionKey 会额外序列化的字段（测试中与表对齐用）
-const EXTRA_KEYS = ['selectable', 'hasControls', 'isVariableImage', 'editable', 'roundValue'];
+const EXTRA_KEYS = [
+  'selectable',
+  'hasControls',
+  'isVariableImage',
+  'editable',
+  'roundValue',
+];
 
 function makeImageElement() {
   const el = document.createElement('img');
-  Object.defineProperty(el, 'src', { value: 'https://cdn.example.com/a.png', writable: true, configurable: true });
+  Object.defineProperty(el, 'src', {
+    value: 'https://cdn.example.com/a.png',
+    writable: true,
+    configurable: true,
+  });
   Object.defineProperty(el, 'width', { value: 100, writable: true, configurable: true });
   Object.defineProperty(el, 'height', { value: 100, writable: true, configurable: true });
   Object.defineProperty(el, 'naturalWidth', { value: 100, writable: true, configurable: true });
   Object.defineProperty(el, 'naturalHeight', { value: 100, writable: true, configurable: true });
   Object.defineProperty(el, 'complete', { value: true, writable: true, configurable: true });
-  Object.defineProperty(el, 'crossOrigin', { value: 'anonymous', writable: true, configurable: true });
+  Object.defineProperty(el, 'crossOrigin', {
+    value: 'anonymous',
+    writable: true,
+    configurable: true,
+  });
   return el;
 }
 
@@ -78,7 +94,15 @@ describe('jsonOptimizer 缺省字段精简 / 补回', () => {
   });
 
   it('空数组默认值（textbox styles / image filters）可剔除并可补回', () => {
-    const textbox = { type: 'textbox', left: 0, top: 0, width: 20, height: 40, text: 'x', styles: [] };
+    const textbox = {
+      type: 'textbox',
+      left: 0,
+      top: 0,
+      width: 20,
+      height: 40,
+      text: 'x',
+      styles: [],
+    };
     const stripped = stripDefaultFields({ ...textbox });
     expect('styles' in stripped).toBe(false);
     const normalized = normalizeDefaultFields({ ...stripped });
@@ -107,14 +131,28 @@ describe('jsonOptimizer 缺省字段精简 / 补回', () => {
   });
 
   it('strip + normalize 是 fabric toObject 的恒等变换（rect）', () => {
-    const obj = new fabric.Rect({ left: 10, top: 20, width: 100, height: 60, angle: 30, scaleX: 1.5 });
+    const obj = new fabric.Rect({
+      left: 10,
+      top: 20,
+      width: 100,
+      height: 60,
+      angle: 30,
+      scaleX: 1.5,
+    });
     const json = JSON.parse(JSON.stringify(obj.toObject(EXTRA_KEYS)));
     const round = normalizeDefaultFields(stripDefaultFields(JSON.parse(JSON.stringify(json))));
     expect(round).toEqual(json);
   });
 
   it('strip + normalize 是 fabric toObject 的恒等变换（textbox）', () => {
-    const obj = new fabric.Textbox('hello world', { left: 5, top: 6, width: 200, height: 60, fontWeight: 'bold', fill: '#123456' });
+    const obj = new fabric.Textbox('hello world', {
+      left: 5,
+      top: 6,
+      width: 200,
+      height: 60,
+      fontWeight: 'bold',
+      fill: '#123456',
+    });
     const json = JSON.parse(JSON.stringify(obj.toObject(EXTRA_KEYS)));
     const round = normalizeDefaultFields(stripDefaultFields(JSON.parse(JSON.stringify(json))));
     expect(round).toEqual(json);
@@ -135,5 +173,49 @@ describe('jsonOptimizer 缺省字段精简 / 补回', () => {
     const json = JSON.parse(JSON.stringify(group.toObject(EXTRA_KEYS)));
     const round = normalizeCanvasDefaults(stripCanvasDefaults(JSON.parse(JSON.stringify(json))));
     expect(round).toEqual(json);
+  });
+});
+
+describe('jsonOptimizer 分片缓存参数（按接入域名）', () => {
+  const cfg = { getValue: () => 'host-a' };
+
+  it('append：image src 与 tile fill.source 均追加，data:/变量跳过，group 递归', () => {
+    const json = {
+      objects: [
+        { type: 'image', src: 'https://cdn.example.com/a.png' },
+        { type: 'rect', fill: { type: 'pattern', source: 'https://cdn.example.com/b.png?w=1' } },
+        { type: 'image', src: 'https://x.com/{{u.id}}/a.png' },
+        { type: 'image', src: 'data:image/png;base64,abc' },
+        {
+          type: 'group',
+          objects: [{ type: 'image', src: 'https://cdn.example.com/c.png#f' }],
+        },
+      ],
+    };
+    appendImagesCacheBustParam(json, cfg);
+    expect(json.objects[0].src).toBe('https://cdn.example.com/a.png?feDomain=host-a');
+    expect(json.objects[1].fill.source).toBe('https://cdn.example.com/b.png?w=1&feDomain=host-a');
+    expect(json.objects[2].src).toBe('https://x.com/{{u.id}}/a.png');
+    expect(json.objects[3].src).toBe('data:image/png;base64,abc');
+    expect(json.objects[4].objects[0].src).toBe('https://cdn.example.com/c.png?feDomain=host-a#f');
+  });
+
+  it('remove：与 append 对称，round-trip 恒等', () => {
+    const json = {
+      objects: [
+        { type: 'image', src: 'https://cdn.example.com/a.png?feDomain=host-a&w=1' },
+        {
+          type: 'rect',
+          fill: { type: 'pattern', source: 'https://cdn.example.com/b.png?feDomain=host-a#f' },
+        },
+      ],
+    };
+    removeImagesCacheBustParam(json);
+    expect(json.objects[0].src).toBe('https://cdn.example.com/a.png?w=1');
+    expect(json.objects[1].fill.source).toBe('https://cdn.example.com/b.png#f');
+    appendImagesCacheBustParam(json, cfg);
+    removeImagesCacheBustParam(json);
+    expect(json.objects[0].src).toBe('https://cdn.example.com/a.png?w=1');
+    expect(json.objects[1].fill.source).toBe('https://cdn.example.com/b.png#f');
   });
 });

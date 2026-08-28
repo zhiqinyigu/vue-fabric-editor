@@ -98,6 +98,8 @@ export default {
             ? () => fontAdapter.list()
             : undefined,
         defaultQrCodeData: props.options.defaultQrCodeData,
+        // 「按接入域名分片缓存」配置透传：默认 feDomain=location.hostname，传 false 关闭，传 { param, getValue } 自定义
+        cacheBust: props.options.cacheBust,
       });
       emit('ready', { core, canvas });
       render();

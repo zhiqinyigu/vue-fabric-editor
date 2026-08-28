@@ -44,7 +44,7 @@ export { default as VariablePlugin } from './plugin/VariablePlugin';
 export { default as AutoGrowPlugin } from './plugin/AutoGrowPlugin';
 export * from './variableEngine';
 export { qrParamsToOption, generateQrCodeDataURL, generateBarcodeDataURL } from './generators';
-export { normalizeAssetUrl } from './assetUrl';
+export { normalizeAssetUrl, appendCacheBustParam } from './assetUrl';
 export { OBJECT_DEFAULTS, getDefaultsForType } from './objectDefaults';
 export {
   stripDefaultFields,

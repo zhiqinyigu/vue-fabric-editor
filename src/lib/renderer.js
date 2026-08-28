@@ -35,7 +35,7 @@ export {
 } from '@/core/variableEngine';
 // 变量图渲染期布局（渲染器在图片就绪后自动执行；导出供宿主复用/测试）
 export { layoutVariableImages } from '@/core/variableImageFit';
-export { normalizeAssetUrl } from '@/core/assetUrl';
+export { normalizeAssetUrl, appendCacheBustParam } from '@/core/assetUrl';
 export { generateQrCodeDataURL, generateBarcodeDataURL, qrParamsToOption } from '@/core/generators';
 export {
   normalizeDefaultFields,

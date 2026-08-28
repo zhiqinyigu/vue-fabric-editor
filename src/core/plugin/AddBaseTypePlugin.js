@@ -7,6 +7,7 @@
  */
 import { fabric } from 'fabric';
 import { v4 as uuid } from 'uuid';
+import { appendCacheBustParam } from '../assetUrl';
 class AddBaseTypePlugin {
     constructor(canvas, editor) {
         this.canvas = canvas;
@@ -88,7 +89,12 @@ class AddBaseTypePlugin {
                 });
             }
             else {
-                fabric.Image.fromURL(target.src, (imgEl, isError) => {
+                // 请求 URL 追加「按接入域名分片缓存」参数（幂等；对象 src 存请求态 URL，保存时统一移除）
+                const requestUrl = appendCacheBustParam(
+                    target.src,
+                    this.editor && this.editor.options && this.editor.options.cacheBust
+                );
+                fabric.Image.fromURL(requestUrl, (imgEl, isError) => {
                     if (isError) {
                         reject(new Error('图片加载失败，请检查地址与跨域(CORS)设置'));
                         return;

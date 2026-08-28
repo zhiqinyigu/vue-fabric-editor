@@ -7,6 +7,7 @@
  */
 import { fabric } from 'fabric';
 import { throttle } from 'lodash-es';
+import { appendCacheBustParam } from '../assetUrl';
 import {
   computeBackgroundLayout,
   cloneWorkspaceAsClip,
@@ -237,6 +238,12 @@ class WorkspacePlugin {
     this.removeBackgroundImage();
     this.backgroundImageMode = mode;
     this.backgroundImagePosition = position || { x: 0.5, y: 0.5 };
+    // 请求 URL 追加「按接入域名分片缓存」参数（幂等）；对象元素 src 为带参 URL（保存时统一移除），
+    // backgroundImageDataUrl 基准保持干净 URL，setBackgroundMode 重建时重新追加
+    const requestUrl = appendCacheBustParam(
+      dataUrl,
+      this.editor && this.editor.options && this.editor.options.cacheBust
+    );
     const img = new Image();
     img.onload = () => {
       const imgW = img.naturalWidth || img.width;
@@ -266,7 +273,7 @@ class WorkspacePlugin {
     img.onerror = () => {
       console.error('背景图加载失败');
     };
-    img.src = dataUrl;
+    img.src = requestUrl;
   }
   // 计算背景对象布局（cover/contain 用 Image 的缩放与对齐，tile 用 Rect 铺满）
   // 供创建与就地同步复用；依赖 this.backgroundImageSize（原始像素尺寸）

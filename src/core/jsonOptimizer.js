@@ -9,6 +9,12 @@
  * 两端共用 objectDefaults 表，保证"编辑器精简 + 渲染器补齐"双向契约一致。
  */
 import { getDefaultsForType } from './objectDefaults';
+import {
+  isRemoteHttpUrl,
+  appendCacheBustParam,
+  removeCacheBustParam,
+  DEFAULT_CACHE_BUST_PARAM,
+} from './assetUrl';
 
 function isEqual(a, b) {
   if (a === b) return true;
@@ -76,6 +82,46 @@ export function patchImageCrossOrigin(json, crossOrigin = 'anonymous') {
         item.crossOrigin == null
       ) {
         item.crossOrigin = crossOrigin;
+      }
+      if (Array.isArray(item.objects)) walk(item.objects);
+    });
+  };
+  walk(json.objects);
+  return json;
+}
+
+// 远程图片「按接入域名分片缓存」：递归给 objects 中远程 URL 追加分片参数。
+// 覆盖 image 元素 src 与背景 tile 形态的 fill.source（pattern 序列化 URL）；
+// data: / 变量占位符 / 已含同参数自动跳过（幂等）。仅请求态存在，保存端对称移除。
+export function appendImagesCacheBustParam(json, config) {
+  if (!json || !Array.isArray(json.objects)) return json;
+  const walk = (items) => {
+    items.forEach((item) => {
+      if (!item || typeof item !== 'object') return;
+      if (isRemoteHttpUrl(item.src)) {
+        item.src = appendCacheBustParam(item.src, config);
+      }
+      if (item.fill && isRemoteHttpUrl(item.fill.source)) {
+        item.fill.source = appendCacheBustParam(item.fill.source, config);
+      }
+      if (Array.isArray(item.objects)) walk(item.objects);
+    });
+  };
+  walk(json.objects);
+  return json;
+}
+
+// 对称移除分片缓存参数（保存/导出前调用，存储态恢复干净 URL）
+export function removeImagesCacheBustParam(json, param = DEFAULT_CACHE_BUST_PARAM) {
+  if (!json || !Array.isArray(json.objects)) return json;
+  const walk = (items) => {
+    items.forEach((item) => {
+      if (!item || typeof item !== 'object') return;
+      if (typeof item.src === 'string') {
+        item.src = removeCacheBustParam(item.src, param);
+      }
+      if (item.fill && typeof item.fill.source === 'string') {
+        item.fill.source = removeCacheBustParam(item.fill.source, param);
       }
       if (Array.isArray(item.objects)) walk(item.objects);
     });
