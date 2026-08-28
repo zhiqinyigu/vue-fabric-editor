@@ -1,0 +1,48 @@
+name: Publish
+
+# 触发：推 v* tag（配合 `npm version patch && git push --follow-tags`）
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write # 必需：换取 npm OIDC token（缺失会报 ENEEDAUTH）
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest # 仅支持 GitHub 托管 runner，自建 runner 不支持 Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1) 用项目固定的 Node 16 构建产物
+      #    （vue-cli 4 / webpack 4 在 Node 17+ 需要 --openssl-legacy-provider）
+      - name: Setup Node (build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 16.14.0
+
+      # 注意：package-lock.json 未纳入版本控制，故用 npm install 而非 npm ci
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build library
+        run: npm run build:lib
+
+      - name: Build renderer
+        run: npm run build:lib:renderer
+
+      # 2) 切到满足 Trusted Publishing 要求的 Node（自带 npm CLI >= 11.5.1）
+      - name: Setup Node (publish)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      # dist 已构建完成：--ignore-scripts 跳过 prepublishOnly，
+      # 避免在 Node 24 上重跑 webpack4 构建而失败。
+      # 无需 NPM_TOKEN：npm 检测到 OIDC 环境会优先使用短期发布 token；
+      # public 仓库 + public 包会自动生成 provenance，无需 --provenance。
+      - name: Publish to npm (OIDC)
+        run: npm publish --ignore-scripts

@@ -93,6 +93,24 @@ export declare const ServersPlugin: any;
 export declare const RendererWorkspacePlugin: any;
 export declare const RendererAutoGrowPlugin: any;
 
+/* ============ 运行时单实例注入（跨打包器） ============ */
+
+/**
+ * 注入消费方的 `vue` / `@vue/composition-api` 单例，消除依赖树多副本导致的
+ * `_vm.$t is not a function` 与 `The setup binding property "..." is already declared`。
+ * 建议在消费方入口（`main.js`）调用一次；未注入时回退为构建解析到的实例。
+ */
+export declare function installRuntime(options: {
+  vue?: any;
+  Vue?: any;
+  compositionApi?: any;
+  CompositionApi?: any;
+  api?: any;
+}): boolean;
+
+/** 是否已调用过 `installRuntime` 完成注入 */
+export declare function isRuntimeInjected(): boolean;
+
 /* ============ 共享纯函数 ============ */
 
 export declare const fabric: any;

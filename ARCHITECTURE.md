@@ -1,7 +1,48 @@
 # 架构规范：编辑器 / 渲染器 双引擎插件化
 
-> 版本：vue-fabric-editor 重构基线（RendererCore 纯净化 + PluginEngine 基类）
-> 适用范围：本仓库所有与「FabricEditor 编辑器」「FabricRenderer 前台渲染」相关的后续迭代。
+> 适用范围：本仓库所有与「`FabricEditor` 编辑器」「`FabricRenderer` 前台渲染」相关的后续迭代。
+> 定位：这是**改代码前必读的约束文档**——不教你用组件（那是 [README](./README.md)），只规定"代码该写在哪、什么不能写"。
+
+---
+
+## 0. 导读（先看这里）
+
+### 0.1 三条铁律
+
+1. **引擎 = 容器，插件 = 能力**：`Editor` / `RendererCore` 只做「fabric canvas + 插件注册 + 加载管线」，任何业务逻辑都进插件。
+2. **共享纯函数 = 单一事实来源**：几何、序列化、变量计算只有一份实现，编辑器与渲染器**必须复用同一模块**，禁止复制粘贴或另写一套。
+3. **渲染器保持纯净**：`RendererCore` 不得出现任何编辑能力（撤销、选择、变换、右键、快捷键、标尺、图层…）。
+
+### 0.2 一页速览：我要做 X，该看哪节
+
+| 我想做的事 | 看哪节 | 典型落点 |
+| --- | --- | --- |
+| 加一个编辑能力（新工具/新交互） | §2 + §3.1 | `src/core/plugin/XxxPlugin.js` + 在 `FabricEditor.vue` 的 `.use()` 链注册 |
+| 加一个渲染能力（C 端呈现） | §4 | `src/core/plugin/RendererXxxPlugin.js` + `RendererCore` 构造注册 |
+| 改画布背景/尺寸/裁剪几何 | §5 | `src/core/workspaceGeometry.js` |
+| 改「保存瘦身 / 加载补回」字段 | §5 + §6 | `jsonOptimizer.js` + `objectDefaults.js` 对称改 |
+| 改变量替换 / autoGrow 规则 | §5 | `variableEngine.js`（两端共用） |
+| 改图片加载 / 跨域 / 导出 | §6 + §7.4 | `ServersPlugin` / `imageLoader.js` |
+| 处理"宿主环境差异"（多副本实例、素材路径） | §7 | `runtime.js` / `canvasAsset.js` |
+| 新增包内导出、改构建产物 | §8 + §9 | `src/lib/index.js` / `src/lib/renderer.js` / `vue.config.js` |
+| 提交前自查 | §11 | 检查清单 + 验证命令 |
+
+> 注：本文件内的章节引用统一用「§编号」，避免依赖渲染器生成的锚点。
+
+### 0.3 文档地图
+
+| 节 | 一句话 |
+| --- | --- |
+| §1 | 分层总览：引擎 / 插件 / 纯函数 / 运行时层 / 构建期工具 |
+| §2 | `PluginEngine` 基类：插件拿到的**全部**引擎能力面 |
+| §3 | `Editor` 与 `RendererCore` 的差异与各自铁律 |
+| §4 | 渲染器的两个核心插件 + 标准渲染编排（6 步管线） |
+| §5 | 共享纯函数层清单 + 背景几何公式（含历史教训） |
+| §6 | 两侧共用的加载 / 导出管线 |
+| §7 | 运行时能力层：单实例注入、素材解析、渲染守卫、CORS 回退 |
+| §8 | 构建期宿主契约：`loader/`（webpack 插件 / 素材 loader）与 `types/` |
+| §9 | 对外导出面（改这里等于改契约） |
+| §11 | 开发约束与检查清单 + 验证命令 + 测试约定 |
 
 ---
 
@@ -17,7 +58,7 @@
               ┌─────────────────┴─────────┐  ┌─────┴──────────────────────────┐
               │        Editor（编辑器）     │  │      RendererCore（渲染器）      │
               │  编辑能力齐全（交互/快捷键/  │  │  只读呈现、无编辑能力、体积小      │
-              │  右键菜单/API 代理）        │  │  固定注册 5 个渲染插件            │
+              │  右键菜单/API 代理）        │  │  固定注册渲染插件                 │
               └──────────┬──────────────┘  └──────┬───────────────────────────┘
                          │                        │
          ┌───────────────┼──────────────┐  ┌──────┼──────────────────────┐
@@ -30,14 +71,38 @@
          ▼               ▼                │        ▼
    ┌──────────────────────────────────────┴────────────────────────────────────┐
    │ 共享纯函数层（无副作用、两端可复用）                                         │
-   │ workspaceGeometry.js / variableEngine.js / jsonOptimizer.js / objectDefaults │
-   │ / assetUrl.js / generators.js / renderPatches.js / BindPluginHooks.js        │
+   │ workspaceGeometry / variableEngine / variableSchema / jsonOptimizer         │
+   │ / objectDefaults / assetUrl / generators / workspaceGeometry / renderPatches │
+   └────────────────────────────────────────────────────────────────────────────┘
+                         ▲                        ▲
+                         │                        │
+   ┌─────────────────────┴────────────────────────┴─────────────────────────────┐
+   │ 运行时能力层（跨引擎、面向宿主环境；见 §7）                                    │
+   │ runtime.js（单实例注入）/ canvasAsset.js（素材解析）/ patchImageRender.js     │
+   │ / imageLoader.js（CORS 回退与画布污染标记）                                   │
+   └────────────────────────────────────────────────────────────────────────────┘
+                         ▲
+   ┌─────────────────────┴──────────────────────────────────────────────────────┐
+   │ 构建期宿主契约（不参与运行时；见 §8）：loader/（webpack 插件 + 素材 loader）   │
+   │ + types/*.d.ts（对外类型）                                                  │
    └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **引擎 = 容器**：Editor 与 RendererCore 都只是「fabric canvas + 插件注册 + 加载管线」，业务逻辑全部下沉到插件。
-- **插件 = 能力单元**：声明式注册（`pluginName`），生命周期钩子（`hookImportAfter` 等）通过 tapable 挂到 `hooksEntity`。
-- **共享纯函数层 = 单一事实来源**：两边必须复用同一实现，禁止复制粘贴或另写一套。
+### 1.3 关键文件索引
+
+| 关注点 | 文件 |
+| --- | --- |
+| 引擎基类 | `src/core/PluginEngine.js` |
+| 编辑器引擎 / 渲染引擎 | `src/core/Editor.js` / `src/core/RendererCore.js` |
+| 插件目录 | `src/core/plugin/*.js`（编辑插件 + `Renderer*Plugin`） |
+| 加载 / 导出管线 | `src/core/ServersPlugin.js` |
+| 共享纯函数 | `src/core/{workspaceGeometry,variableEngine,variableSchema,jsonOptimizer,objectDefaults,assetUrl,generators}.js` |
+| 运行时能力 | `src/core/{runtime,canvasAsset,patchImageRender,imageLoader}.js` |
+| 组件外壳 | `src/lib/FabricEditor.vue` / `src/lib/FabricRenderer.vue` |
+| 包入口 | `src/lib/index.js`（编辑器）/ `src/lib/renderer.js`（渲染器） |
+| 宿主构建工具 | `loader/{webpack-plugin,assets-loader,assets-core}.js` |
+| 对外类型 | `types/index.d.ts` / `types/fabric-renderer.d.ts` |
+| 构建脚本 | `vue.config.js` + `package.json` 的 `build:lib*` |
 
 ---
 
@@ -47,7 +112,7 @@
 
 | 成员 | 说明 |
 | --- | --- |
-| `constructor` | 初始化 `pluginMap = {}`、`hooksEntity = {}`（子类勿忘 `super(...arguments)`） |
+| `constructor` | 初始化 `pluginMap = {}`、`hooksEntity = {}`（子类勿忘 `super(...arguments)`）；`setMaxListeners(0)`（属性面板组件量大，固定阈值会误报） |
 | `_initHooks(hookNames?)` | 为 `PLUGIN_HOOKS`（或自定义子集）创建 tapable `AsyncSeriesHook(['data'])`，存入 `this.hooks` / `this.hooksEntity` |
 | `_bindPlugin(plugin, options?)` | `new plugin(canvas, this, options)` → 存 `pluginMap` → `bindPluginHooks` 挂钩子；**`use()` 内部必须复用** |
 | `getPlugin(name)` | 返回插件实例；不存在返回 `null`（**不要依赖抛错**） |
@@ -59,16 +124,16 @@
 
 **基类差异留给子类的两处**：
 - hooks 初始化时机：`Editor` 在 `init(canvas)` 时；`RendererCore` 在构造函数内。
-- `use()` 各自的额外行为（见下）。
+- `use()` 各自的额外行为（见 §3）。
 
 ---
 
-## 3. 引擎差异与约定
+## 3. 两个引擎的差异与约定
 
 ### 3.1 Editor（`src/core/Editor.js`）——编辑器，能力齐全
 - `use(plugin, options)`：`_checkPlugin`（重名/事件/API 冲突抛错）→ `_saveCustomAttr` → `_bindPlugin` → `_bindingHotkeys` → `_bindingApis`（API 代理到 `editor` 实例上）。
-- `init(canvas)`：设置 canvas → 重置 `pluginMap` → 右键菜单 → `_initActionHooks()`（即 `_initHooks(this.hooks)`）→ 内置 `ServersPlugin`。
-- `destory()`：先清自身字段，再 `super.destroy()`。
+- `init(canvas)`：设置 canvas → 重置 `pluginMap` → 右键菜单 → `_initActionHooks()`（即 `_initHooks(this.hooks)`）→ 内置 `ServersPlugin`；随后安装远程图片 CORS 回退（`installImageCorsFallback`）并监听 `image:cors-fallback`（标记 `canvasTainted`，供宿主提示导出受限）。
+- `destory()`：解绑 CORS 监听 → 清自身字段（`canvas` / `contextMenu` / `customEvents` / `customApis`）→ `super.destroy()`。
 
 ### 3.2 RendererCore（`src/core/RendererCore.js`）——渲染器，纯净
 - **构造即注册**，固定且只注册渲染所需：
@@ -79,12 +144,12 @@
 
 ### 3.3 铁律
 1. **不要向 RendererCore 添加编辑能力**（撤销、选择、变换、右键、快捷键、Ruler、图层……一概不进）。
-2. **渲染业务只进插件**：`RendererWorkspacePlugin` / `RendererAutoGrowPlugin`，不得直接写在 RendererCore 或 FabricRenderer.vue。
+2. **渲染业务只进插件**：`RendererWorkspacePlugin` / `RendererAutoGrowPlugin`，不得直接写在 `RendererCore` 或 `FabricRenderer.vue`。
 3. **新渲染能力 = 新渲染插件**，遵循「插件命名 `RendererXxxPlugin`、`pluginName` 前缀 `Renderer`」约定。
 
 ---
 
-## 4. 渲染器两个核心插件
+## 4. 渲染器核心插件与渲染编排
 
 ### 4.1 RendererWorkspacePlugin（`src/core/plugin/RendererWorkspacePlugin.js`）
 对应编辑器 `WorkspacePlugin`，但零编辑依赖。职责：
@@ -126,13 +191,14 @@ render()
 | `variableEngine.js` | `render` / `renderObjects` / `extractVariables` / `computeAutoGrowSize` / `DEFAULT_DELIMITER` | 变量替换与 autoGrow 计算 |
 | `jsonOptimizer.js` | `stripDefaultFields` / `normalizeDefaultFields` / `stripCanvasDefaults` / `normalizeCanvasDefaults` / `patchImageCrossOrigin` | JSON 瘦身（编辑端剔除缺省字段）与还原（渲染端补回） |
 | `objectDefaults.js` | `OBJECT_DEFAULTS` / `getDefaultsForType` | 各类对象缺省值 |
-| `assetUrl.js` | `normalizeAssetUrl` | 资源 URL 归一 |
+| `assetUrl.js` | `normalizeAssetUrl` / `appendCacheBustParam` | 资源 URL 归一与分片缓存参数 |
 | `generators.js` | `generateQrCodeDataURL` / `generateBarcodeDataURL` / `qrParamsToOption` | 二维码/条形码参数化生成（JSON 不存 base64，加载时再生成） |
 | `renderPatches.js` | — | fabric 对象补丁（副作用，构造引擎前 import 一次） |
 | `BindPluginHooks.js` | `PLUGIN_HOOKS` / `bindPluginHooks` | hook 契约与绑定 |
 
 ### 5.1 背景几何公式（`computeBackgroundLayout`）
-采用**标准 cover/contain**语义（已与编辑器 WorkspacePlugin 收敛一致，勿再改回旧「交换式」）：
+
+采用**标准 cover/contain** 语义（已与编辑器 `WorkspacePlugin` 收敛一致，勿再改回旧「交换式」）：
 
 - `rectRatio = rectW / rectH`，`imgRatio = imgW / imgH`
 - **contain（整体可见，取较小缩放）**：`scale = rectRatio > imgRatio ? rectH / imgH : rectW / imgW`
@@ -143,7 +209,7 @@ render()
 
 ---
 
-## 6. ServersPlugin：两侧共用的一条加载/导出管线（`src/core/ServersPlugin.js`）
+## 6. 加载 / 导出管线（`ServersPlugin`）
 
 编辑与渲染共用同一实例化管线，保证两端结果一致：
 
@@ -159,23 +225,67 @@ render()
   - `_getSaveOption(multiplier = 1)` → 底层选项
   - API 代理 `editor.exportFile(type, multiplier)` / `editor.preview(multiplier)`
 
-> 新增加载/导出逻辑必须放在 ServersPlugin（或它调用的纯函数），编辑与渲染两侧自动同时生效。
+> 新增加载/导出逻辑必须放在 `ServersPlugin`（或它调用的纯函数），编辑与渲染两侧自动同时生效。
 
 ---
 
-## 7. 对外导出面（勿随意改动）
+## 7. 运行时能力层（宿主环境适配）
 
-- `src/core/index.js`（主库入口）：导出 `Editor`、全部编辑插件、`RendererCore`、`RendererWorkspacePlugin`、`RendererAutoGrowPlugin`、共享纯函数、`createBackgroundObject` 等。
-- `src/lib/renderer.js`（fabric-renderer 包入口）：**只导出渲染所需**（RendererCore、ServersPlugin、两个渲染插件、渲染依赖的纯函数、`fabric`、`FabricRenderer`）。新增渲染导出放这里，勿引入编辑插件/UI。
-- 打包脚本：`build`（应用）、`build:lib`（主库）、`build:lib:renderer`（渲染包）。改导出面后三构建都要过。
+这一层不参与业务逻辑，解决的是**"同一份产物在任意宿主里都要正确工作"**的问题。改动它们时会同时影响两个引擎，务必回归两端。
+
+### 7.1 `runtime.js`（单实例注入门面）
+- **问题**：依赖树出现第二份 `vue` 或 `@vue/composition-api` 时，分别导致 `_vm.$t is not a function`、`The setup binding property "..." is already declared`。
+- **机制**：消费方入口调用 `installRuntime({ vue, compositionApi, assetsBaseUrl })` 注入单例；门面把所有 composition-api API 包装为**调用期取值**（注入晚于 import 也生效）；`onRuntimeReady(cb)` 处理模块加载期的全局注册（如 `Vue.use(VueI18n)` 补注册一次，幂等）。
+- **约束**：未注入时必须回退为"构建解析到的实例"（向后兼容），并在开发环境给一次可操作提示；`src/lib/i18n.js`、`src/language/index.js` 是仅有的两个模块加载期注册点。
+- **构建配合**：`vue.config.js` 在 lib 构建中把 `@vue/composition-api$` 精确 alias 到 `src/core/runtime.js`，门面自身用深层路径懒加载真实包（external），因此源码里的 `import { ref } from '@vue/composition-api'` 无需改动。
+
+### 7.2 `canvasAsset.js`（画布素材解析）
+- **问题**：产物里 13 个画布素材（5 控件图标 + 8 滤镜缩略图）是 file-loader 产出的 `__webpack_require__.p + "x.svg"`，宿主不会复制包内文件 → 404 → 控件图标 broken → `drawImage` 抛 `InvalidStateError`。
+- **机制**：`resolveCanvasAsset(相对路径, fallback)` —— 配了 `assetsBaseUrl` 用基址拼（相对路径即**稳定文件名**），否则回退 file-loader 产物（webpack 插件路径）。`reportCanvasAssetFailure()` 在加载失败时打印一次可照做的错误。
+- **素材命名**：库构建对这批素材关闭 hash（`name=[name].[ext]` / `img/[name].[ext]`），保证基址路径可预期；**新增画布素材必须沿用稳定命名**。
+- **两条接入路径互斥**：webpack 用 `VfeAssetsPlugin`（引用被改写，基址不生效）；其它打包器用基址。详见 [PACKAGING.md §4.5](./PACKAGING.md)。
+
+### 7.3 `patchImageRender.js`（渲染守卫）
+- **问题**：容器布局未就绪时初始化 → `Image._element` 或 `canvas.clipPath._cacheCanvas` 为 0×0 → `drawImage` 抛 `InvalidStateError`，整次 `renderAll` 中断、画布空白（编辑器在路由跳转挂载时最易触发）。
+- **机制**：`installImageRenderGuard()`（幂等，两个引擎入口都调用）守卫 `Image.prototype._renderFill` 与 `StaticCanvas.prototype.drawClipPathOnCanvas`；clipPath 0×0 时跳过并标 `dirty` 以便尺寸就绪后重建。
+- **约束**：新增"把资源画到画布"的逻辑时，需容忍元素尺寸为 0（跳过绘制而非抛错）。
+
+### 7.4 `imageLoader.js`
+- `loadImageResilient(url, { crossOrigin })`：crossOrigin 失败自动去 crossOrigin 重试（保显示，代价是画布被污染、导出受限）。
+- `installImageCorsFallback()` / `addCorsFallbackListener()`：包装 `fabric.util.loadImage`，回退发生时回调（`Editor` 借此标记 `canvasTainted` 并 `emit('image:cors-fallback')`）。
+- **约束**：涉及导出的功能必须考虑"画布可能已被污染"，导出失败要有明确提示（`save-error`）。
 
 ---
 
-## 8. 开发约束与检查清单
+## 8. 构建期宿主契约（`loader/`、`types/`）
 
-**新增一个渲染能力（如新的图层类型渲染、特效）时，按此清单自查：**
+这部分**不参与运行时**，是给消费方构建链路用的；改动需同步 `package.json` 的 `files` / `exports` 与 [PACKAGING.md](./PACKAGING.md)。
 
-- [ ] 引擎侧零改动：业务放 `RendererXxxPlugin`（继承/复用基类契约），或放共享纯函数。
+| 文件 | 作用 |
+| --- | --- |
+| `loader/assets-core.js` | 纯函数：素材引用的识别 / 去重 / 改写（`collectAssetRefs`、`rewriteAssetRefs`、`rewriteToAssetMap`）。**各打包器适配层的共同底座**——新增 Vite/Rollup/esbuild 插件必须复用，不许另写一套 |
+| `loader/assets-loader.js` | webpack loader：把素材 URL 改写为宿主 `require`（复用 assets-core） |
+| `loader/webpack-plugin.js` | `VfeAssetsPlugin`：一行接入，幂等注入上面的 loader 规则 |
+| `types/*.d.ts` | 对外类型（Props / 事件 / api / 扩展协议 / `installRuntime` 等），**手写维护**，改契约必须同步 |
+
+> 宿主工具依赖 `file-loader`（vue-cli 自带）→ loader 从**宿主项目根**解析，解析失败给出可操作报错。
+
+---
+
+## 9. 对外导出面（勿随意改动）
+
+- `src/core/index.js`（引擎 barrel）：导出 `Editor`、全部编辑插件、`RendererCore`、`RendererWorkspacePlugin`、`RendererAutoGrowPlugin`、共享纯函数、`createBackgroundObject` 等。
+- `src/lib/index.js`（编辑器包入口）：`FabricEditor`、`createI18n` / `messages`、注册表 / 扩展 / api 工厂、hooks、内置可覆盖组件（`TopbarImport`、`RightPanel`）、`installRuntime` / `isRuntimeInjected`、`setCanvasAssetsBaseUrl` / `resolveCanvasAsset`。
+- `src/lib/renderer.js`（渲染包入口）：**只导出渲染所需**（`RendererCore`、`ServersPlugin`、两个渲染插件、渲染依赖的纯函数、`fabric`、`FabricRenderer`、`installRuntime`）。**勿引入编辑插件 / UI**。
+- 打包脚本：`build`（应用站点）、`build:lib`（主库）、`build:lib:renderer`（渲染包）。改导出面后三个构建都要过。
+
+---
+
+## 11. 开发约束与检查清单
+
+### 11.1 新增渲染能力（新图层类型渲染、特效等）
+
+- [ ] 引擎侧零改动：业务放 `RendererXxxPlugin`（复用基类契约），或放共享纯函数。
 - [ ] 几何/序列化逻辑放进 `workspaceGeometry.js` / `jsonOptimizer.js` 等纯函数模块，编辑器插件复用同一函数。
 - [ ] 依赖另一端已有行为时，检查是否也应同步到编辑器插件（两端一致），而非只在渲染侧实现。
 - [ ] JSON 序列化遵守「编辑器瘦身、渲染器补回」对称约定：新增可缺省字段要同时进 `objectDefaults` / `jsonOptimizer`。
@@ -184,15 +294,43 @@ render()
 - [ ] 插件注册注意 `pluginName` 唯一、渲染插件前缀 `Renderer`。
 - [ ] 出口文件：用到渲染包则在 `src/lib/renderer.js` 导出，测试是否影响 tree-shaking。
 
-**验证命令：**
-```
-npx jest                      # 全量单测（当前 157 通过）
-npm run build                 # 应用
-npm run build:lib             # 主库
-npm run build:lib:renderer    # 渲染包
+### 11.2 新增编辑能力 / 宿主适配（运行时层）
+
+- [ ] 编辑能力 = 新插件（`src/core/plugin/`）+ 在 `FabricEditor.vue` 的 `.use()` 链注册；`pluginName` / `apis` / `events` 全局唯一。
+- [ ] hooks 必须返回 Promise 或值，**不要吞异常**（`AsyncSeriesHook` 会因此静默中断加载管线）。
+- [ ] 插件 `destroy()` 里解绑自身监听的 canvas / editor 事件。
+- [ ] 新增"把资源画到画布"的逻辑：容忍 0 尺寸元素（见 §7.3），不要直接 `drawImage`。
+- [ ] 新增画布素材：沿用**稳定命名**（无 hash）+ 走 `resolveCanvasAsset`，否则非 webpack 宿主的 `assetsBaseUrl` 路径会失效（见 §7.2）。
+- [ ] 触及宿主实例的代码（vue / composition-api）：走 `runtime.js` 门面，别直接 `require('vue')`。
+- [ ] 改对外 API / Props / 事件 / 扩展协议：同步 `types/*.d.ts` 与 [README](./README.md) 组件文档。
+
+### 11.3 验证命令
+
+```bash
+npx jest                        # 全量单测（当前 35 套件 / 417 用例）
+npx jest tests/runtimeFacade.test.js tests/canvasAsset.test.js   # 单跑某几个套件
+npm run lint                    # 代码规范
+npm run typecheck               # types/*.d.ts 冒烟
+npm run build                   # 应用站点
+npm run build:lib               # 主库
+npm run build:lib:renderer      # 渲染包
 ```
 
-**测试约定：**
-- `renderer.test.js` 用 `createRenderer()` + `wsPlugin(core)`/`autoGrowPlugin(core)` 助手，断言走插件公开方法，不触碰内部状态。
-- `pluginEngine.test.js` 校验基类契约（hooks 创建/绑定/清理、Editor 与 RendererCore 继承关系）。
-- CSS / qr-code-styling 等在 node 环境需 `jest.mock(..., { virtual: true })` 兜底，参考已有测试头部。
+### 11.4 测试约定
+
+- `renderer.test.js` 用 `createRenderer()` + `wsPlugin(core)` / `autoGrowPlugin(core)` 助手，断言走插件公开方法，不触碰内部状态。
+- `pluginEngine.test.js` 校验基类契约（hooks 创建/绑定/清理、`Editor` 与 `RendererCore` 继承关系）。
+- `runtimeFacade.test.js` 校验单实例门面（回退 / 注入 / 幂等 / 互操作解包 / `onRuntimeReady` 时序）。
+- `canvasAsset.test.js` / `assetsCore.test.js` 校验素材解析与 loader 共享核心（含幂等）。
+- CSS / `qr-code-styling` 等在 node 环境需 `jest.mock(..., { virtual: true })` 兜底，参考已有测试头部。
+
+---
+
+## 相关文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [README.md](./README.md) | 快速上手、组件 API、扩展示例、二次开发入口 |
+| [PACKAGING.md](./PACKAGING.md) | 打包 / 集成 / 发布；§4.5 画布素材契约、§4.6 运行时单实例注入 |
+| [types/](./types) | 对外类型声明（Props / 事件 / api / 扩展协议） |
+| [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md) | 第三方代码与资源清单 |

@@ -6,10 +6,11 @@
  * @Description: 控制条插件
  */
 import { fabric } from 'fabric';
-import verticalImg from '!!file-loader!../assets/middlecontrol.svg';
-import horizontalImg from '!!file-loader!../assets/middlecontrolhoz.svg';
-import edgeImg from '!!file-loader!../assets/edgecontrol.svg';
-import rotateImg from '!!file-loader!../assets/rotateicon.svg';
+import verticalImg from '!!file-loader?name=[name].[ext]!../assets/middlecontrol.svg';
+import horizontalImg from '!!file-loader?name=[name].[ext]!../assets/middlecontrolhoz.svg';
+import edgeImg from '!!file-loader?name=[name].[ext]!../assets/edgecontrol.svg';
+import rotateImg from '!!file-loader?name=[name].[ext]!../assets/rotateicon.svg';
+import { resolveCanvasAsset, reportCanvasAssetFailure } from '../canvasAsset';
 /**
  * 实际场景: 在进行某个对象缩放的时候，由于fabricjs默认精度使用的是toFixed(2)。
  * 此处为了缩放的精度更准确一些，因此将NUM_FRACTION_DIGITS默认值改为4，即toFixed(4).
@@ -26,9 +27,13 @@ function drawImg(ctx, left, top, img, wSize, hSize, angle) {
 // 中间横杠
 function intervalControl() {
   const verticalImgIcon = document.createElement('img');
-  verticalImgIcon.src = verticalImg;
+  verticalImgIcon.src = resolveCanvasAsset('middlecontrol.svg', verticalImg);
+  verticalImgIcon.onerror = () =>
+    reportCanvasAssetFailure('middlecontrol.svg', verticalImgIcon.src);
   const horizontalImgIcon = document.createElement('img');
-  horizontalImgIcon.src = horizontalImg;
+  horizontalImgIcon.src = resolveCanvasAsset('middlecontrolhoz.svg', horizontalImg);
+  horizontalImgIcon.onerror = () =>
+    reportCanvasAssetFailure('middlecontrolhoz.svg', horizontalImgIcon.src);
   function renderIcon(ctx, left, top, styleOverride, fabricObject) {
     drawImg(ctx, left, top, verticalImgIcon, 20, 25, fabricObject.angle);
   }
@@ -76,7 +81,8 @@ function intervalControl() {
 // 顶点
 function peakControl() {
   const img = document.createElement('img');
-  img.src = edgeImg;
+  img.src = resolveCanvasAsset('edgecontrol.svg', edgeImg);
+  img.onerror = () => reportCanvasAssetFailure('edgecontrol.svg', img.src);
   function renderIconEdge(ctx, left, top, styleOverride, fabricObject) {
     drawImg(ctx, left, top, img, 25, 25, fabricObject.angle);
   }
@@ -154,7 +160,8 @@ function peakControl() {
 // 旋转
 function rotationControl() {
   const img = document.createElement('img');
-  img.src = rotateImg;
+  img.src = resolveCanvasAsset('rotateicon.svg', rotateImg);
+  img.onerror = () => reportCanvasAssetFailure('rotateicon.svg', img.src);
   function renderIconRotate(ctx, left, top, styleOverride, fabricObject) {
     drawImg(ctx, left, top, img, 40, 40, fabricObject.angle);
   }

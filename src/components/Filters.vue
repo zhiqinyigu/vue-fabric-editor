@@ -18,6 +18,7 @@
               <img
                 :src="getImageUrl(key)"
                 alt=""
+                @error="onThumbError(key)"
                 @click="changeFilters(key, !noParamsFilters[key])"
               />
               <Checkbox
@@ -86,6 +87,7 @@ import useSelect from '@/hooks/select';
 import { uiType, paramsFilters, combinationFilters } from '@/config/constants/filter';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
+import { resolveCanvasAsset, reportCanvasAssetFailure } from '@/core/canvasAsset';
 
 export default {
   name: 'ImageFilters',
@@ -191,9 +193,17 @@ export default {
       canvasEditor.off('selectOne', handleSelectOne);
     });
 
-    // 图片地址拼接
+    // 图片地址拼接：稳定命名（img/<Name>.png）+ 运行时基址解析（非 webpack 打包器场景）
     function getImageUrl(name) {
-      return require(`../assets/filters/${name}.png`);
+      return resolveCanvasAsset(
+        `img/${name}.png`,
+        require(`!!file-loader?name=img/[name].[ext]!../assets/filters/${name}.png`)
+      );
+    }
+
+    // 缩略图加载失败：给出「挂插件 / 配基址」的可操作提示（同一素材只提示一次）
+    function onThumbError(name) {
+      reportCanvasAssetFailure(`img/${name}.png`, getImageUrl(name));
     }
 
     // 设置滤镜值
@@ -296,6 +306,7 @@ export default {
       noParamsFilters,
       uiType,
       getImageUrl,
+      onThumbError,
       changeFilters,
       changeFiltersByParams,
       handleSelectOne,

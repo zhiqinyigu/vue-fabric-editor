@@ -1,4 +1,7 @@
-﻿const isLib =
+﻿const path = require('path');
+const resolve = (dir) => path.resolve(__dirname, dir);
+
+const isLib =
   process.argv.indexOf('--target') !== -1 &&
   process.argv[process.argv.indexOf('--target') + 1] === 'lib';
 
@@ -6,6 +9,10 @@ const libExternals = {
   vue: 'vue',
   'view-design': 'view-design',
   '@vue/composition-api': '@vue/composition-api',
+  // 运行时单实例门面（src/core/runtime.js）内部对 composition-api 的「懒加载 fallback」
+  // 用的是深层路径（为避开下面的精确 alias），此处把它映射回包名：
+  // 产物中仍是 require('@vue/composition-api')，由消费方解析到自己的副本。
+  '@vue/composition-api/dist/vue-composition-api.common.js': '@vue/composition-api',
   fabric: 'fabric',
   'lodash-es': 'lodash-es',
   dayjs: 'dayjs',
@@ -25,7 +32,8 @@ const libExternals = {
   'vue-lazyload': 'vue-lazyload',
   'vue-masonry': 'vue-masonry',
   '@webtoon/psd': '@webtoon/psd',
-  'core-js': 'core-js',
+  // 注：不再 external `core-js`。产物中没有任何 `require('core-js')`（polyfill 由宿主 babel
+  // preset-env 决定），保留该 external 属死配置，且易让消费方误以为必须提供 core-js。
 };
 
 module.exports = {
@@ -87,5 +95,12 @@ module.exports = {
     //    通过 `!!file-loader!` 内联语法跳过上述规则
     // 兼容 Node events（webpack4 下 npm events 包正常解析）
     config.resolve.set('symlinks', true);
+
+    if (isLib) {
+      // 运行时单实例门面：lib 构建中，库内所有 '@vue/composition-api' 引用改走
+      // src/core/runtime.js（由消费方通过 installRuntime 注入单例；未注入时回退到解析到的副本）。
+      // 用精确匹配（$）以保证门面自身对 '@vue/composition-api/dist/...' 的 fallback 不被拦截。
+      config.resolve.alias.set('@vue/composition-api$', resolve('src/core/runtime.js'));
+    }
   },
 };

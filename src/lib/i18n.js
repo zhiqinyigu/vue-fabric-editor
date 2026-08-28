@@ -8,15 +8,23 @@
  * - 导出 createI18n 让业务可直接拿到带包内文案的实例
  * - 编辑器上下文内的 t 走该实例，扩展组件用 useEditorContext().t 即可翻译
  */
-import Vue from 'vue';
 import VueI18n from 'vue-i18n';
+import { getVue, onRuntimeReady } from '@/core/runtime';
 import zhView from 'view-design/dist/locale/zh-CN';
 import enView from 'view-design/dist/locale/en-US';
 import zh from '@/language/zh.json';
 import en from '@/language/en.json';
 import pt from '@/language/pt.json';
 
-Vue.use(VueI18n);
+// VueI18n 的全局注册走 runtime 门面，确保装在消费方的唯一 Vue 实例上：
+// - 立即执行一次：未注入时用构建解析到的 Vue（与历史行为一致）
+// - 再注册「注入后」回调：消费方 installRuntime 若晚于本模块加载，补注册一次
+//   （Vue.use 对同一实例幂等，重复调用安全）
+const installVueI18n = (vue) => {
+  if (vue && typeof vue.use === 'function') vue.use(VueI18n);
+};
+installVueI18n(getVue());
+onRuntimeReady(installVueI18n);
 
 export const messages = {
   en: Object.assign({}, en, enView),

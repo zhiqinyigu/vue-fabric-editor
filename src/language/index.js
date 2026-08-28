@@ -5,8 +5,8 @@
  * @LastEditors: June
  * @LastEditTime: 2023-11-01 12:01:24
  */
-import Vue from 'vue';
 import VueI18n from 'vue-i18n';
+import { getVue, onRuntimeReady } from '@/core/runtime';
 import zh from 'view-design/dist/locale/zh-CN';
 import en from 'view-design/dist/locale/en-US';
 import US from './en.json';
@@ -15,7 +15,14 @@ import PT from './pt.json';
 import { getLocal, setLocal } from '@/utils/local';
 import { LANG } from '@/config/constants/app';
 
-Vue.use(VueI18n);
+// 本模块同时被应用站点（main.js）与库内核心（core/plugin）引用，VueI18n 的全局注册
+// 走 runtime 门面：保证装在消费方的唯一 Vue 实例上（未注入时回退为构建解析到的 Vue）。
+// Vue.use 对同一实例幂等，重复调用安全。
+const installVueI18n = (vue) => {
+  if (vue && typeof vue.use === 'function') vue.use(VueI18n);
+};
+installVueI18n(getVue());
+onRuntimeReady(installVueI18n);
 
 const messages = {
   en: Object.assign(US, en), // 将自己的英文包和iview提供的结合

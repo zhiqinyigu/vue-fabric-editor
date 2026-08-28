@@ -1,6 +1,7 @@
 import { fabric } from 'fabric';
 import { drawImg } from '../utils/utils';
-import edgeImg from '!!file-loader!../assets/edgecontrol.svg';
+import edgeImg from '!!file-loader?name=[name].[ext]!../assets/edgecontrol.svg';
+import { resolveCanvasAsset, reportCanvasAssetFailure } from '../canvasAsset';
 import { noop } from 'lodash-es';
 const actionHandler = function (eventData, transform, x, y) {
   const polygon = transform.target,
@@ -66,7 +67,8 @@ class PolygonModifyPlugin {
     this._onDeselected = noop;
     this.isEdit = false;
     const img = document.createElement('img');
-    img.src = edgeImg;
+    img.src = resolveCanvasAsset('edgecontrol.svg', edgeImg);
+    img.onerror = () => reportCanvasAssetFailure('edgecontrol.svg', img.src);
     this.img = img;
     this.init();
   }
