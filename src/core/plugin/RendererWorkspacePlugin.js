@@ -70,6 +70,12 @@ class RendererWorkspacePlugin {
       this.canvas.clipPath = cloned;
       this.canvas.requestRenderAll();
     });
+    // 背景图加载失败检测：fabric 会丢弃加载失败的 image 对象，
+    // 通过"JSON 有背景、画布无背景"识别；空 src（变量空值）按 D2 静默不报错。
+    const bgJson = objects.find((o) => o && o.id === 'backgroundImage');
+    if (bgJson && !this.getBackgroundImageObj() && typeof bgJson.src === 'string' && bgJson.src) {
+      this._emitBackgroundLoadError(bgJson.src);
+    }
   }
 
   /* ---------- autoGrow 静默增高（与编辑器 setSizeSilent 对齐） ---------- */
@@ -95,19 +101,32 @@ class RendererWorkspacePlugin {
     if (!bg || !bg.backgroundImageMode) return;
     const ws = this.getWorkspace();
     if (!ws) return;
-    const el = bg._element || (bg.fill && bg.fill.source);
-    const imgSize = el
-      ? { w: el.naturalWidth || el.width || 0, h: el.naturalHeight || el.height || 0 }
-      : null;
-    if (!imgSize || !(imgSize.w > 0) || !(imgSize.h > 0)) return;
+    const mode = bg.backgroundImageMode;
+    // tile 形态不需要真实尺寸（Rect 铺满 workspace）；cover/contain 必须等图片就绪
+    let imgSize = null;
+    if (mode !== 'tile') {
+      const el = bg._element || (bg.fill && bg.fill.source);
+      imgSize = el
+        ? { w: el.naturalWidth || el.width || 0, h: el.naturalHeight || el.height || 0 }
+        : null;
+      if (!imgSize || !(imgSize.w > 0) || !(imgSize.h > 0)) return;
+    }
     const layout = computeBackgroundLayout({
       workspace: ws,
       imageSize: imgSize,
-      mode: bg.backgroundImageMode,
+      mode,
       position: bg.backgroundPosition || { x: 0.5, y: 0.5 },
     });
     if (!layout) return;
-    bg.set(layout);
+    const next = { ...layout };
+    // 图片形态：width/height 必须重置为真实自然尺寸——
+    // 编辑器导出的背景宽高可能是占位图尺寸（如 240x160），若只改 scale，
+    // 显示尺寸 = JSON 宽 × scale（错误，表现为"左上角一小块"）
+    if (mode !== 'tile' && imgSize) {
+      next.width = imgSize.w;
+      next.height = imgSize.h;
+    }
+    bg.set(next);
     if (bg.setCoords) bg.setCoords();
     this.canvas.requestRenderAll();
   }
@@ -186,23 +205,52 @@ class RendererWorkspacePlugin {
 
   /* ---------- 图片就绪 ---------- */
   whenImagesLoaded() {
+    const pending = [];
+    // 归一为可监听的 DOM 元素；无法监听（字符串/普通对象/已就绪）直接 resolve，
+    // 避免 el.addEventListener is not a function 或监听不到 load 而永久挂起
+    const waitEl = (input) =>
+      new Promise((resolve) => {
+        let el = input;
+        if (!el) return resolve();
+        // Pattern source 可能是 fabric.Image（其 getElement() 才是原生元素）
+        if (
+          typeof el.addEventListener !== 'function' &&
+          el.getElement &&
+          typeof el.getElement === 'function'
+        ) {
+          el = el.getElement();
+        }
+        if (!el || typeof el.addEventListener !== 'function') return resolve();
+        if (el.complete || el.naturalWidth > 0) return resolve();
+        const done = () => resolve();
+        el.addEventListener('load', done);
+        el.addEventListener('error', done);
+      });
     const images = this.canvas
       .getObjects()
       .filter((o) => o instanceof fabric.Image && o.getElement && o.getElement());
-    if (!images.length) return Promise.resolve();
-    return Promise.all(
-      images.map(
-        (img) =>
-          new Promise((resolve) => {
-            const el = img.getElement();
-            if (!el) return resolve();
-            if (el.complete || el.naturalWidth > 0) return resolve();
-            const done = () => resolve();
-            el.addEventListener('load', done);
-            el.addEventListener('error', done);
-          })
-      )
-    );
+    images.forEach((img) => pending.push(waitEl(img.getElement())));
+    // 背景 rect（tile 形态）：Pattern source 是普通 HTMLImageElement，非 fabric.Image，需单独等待
+    const bg = this.getBackgroundImageObj();
+    if (bg && bg.type === 'rect' && bg.fill && bg.fill.source) {
+      pending.push(waitEl(bg.fill.source));
+    }
+    return Promise.all(pending).then(() => {
+      // 背景 rect（tile 形态）pattern source 加载失败：对象保留但填充无效
+      const bg = this.getBackgroundImageObj();
+      if (bg && bg.type === 'rect' && bg.fill && bg.fill.source) {
+        const el = bg.fill.source;
+        if (typeof el.naturalWidth === 'number' && el.naturalWidth === 0) {
+          this._emitBackgroundLoadError(bg.get('src') || bg.fill.source.src || '');
+        }
+      }
+    });
+  }
+  // 背景加载失败（CORS 拒绝 / 真实 URL 失效）→ emit 错误供宿主提示；空 src 静默。
+  _emitBackgroundLoadError(src) {
+    if (src && this.editor && typeof this.editor.emit === 'function') {
+      this.editor.emit('renderer:error', { code: 'IMAGE_LOAD_FAILED', src });
+    }
   }
   destroy() {
     console.log('rendererWorkspaceDestroy');

@@ -188,6 +188,8 @@ class ServersPlugin {
         // 最小化导出（clipboard / 运营后台保存）：
         // 二维码/条形码不再保存 base64：仅保留 extension 参数，渲染时按参数动态生成
         this._stripGeneratedSrc(json);
+        // 变量背景（tile 形态）：Pattern 仅是派生渲染结果，序列化用变量 URL 顶替占位 base64
+        this._stripBackgroundPatternSource(json);
         // 剔除等于默认值的字段，缩小 JSON 体积（渲染端 loadJSON 对称补回）
         stripCanvasDefaults(json);
         // 资源去重：重复图片（相同 src）提升为顶层 assets 清单，以 assetId 引用
@@ -219,17 +221,49 @@ class ServersPlugin {
         if (json && Array.isArray(json.objects)) strip(json.objects);
         return json;
     }
+    // 变量背景（tile 形态）：fill.source 由占位图 base64 顶替为变量 URL（obj.src），
+    // 保证 JSON 无 base64，且渲染端 renderObjects 替换 src 后 pattern 源同步为真实 URL。
+    // （编辑端导入时由 WorkspacePlugin.hookImportAfter 用占位图重建 pattern。）
+    _stripBackgroundPatternSource(json) {
+        const walk = (items) => {
+            if (!Array.isArray(items)) return;
+            items.forEach((item) => {
+                if (!item || typeof item !== 'object') return;
+                if (
+                    item.id === 'backgroundImage' &&
+                    item.isVariableBackground === true &&
+                    item.type === 'rect' &&
+                    item.fill &&
+                    typeof item.src === 'string'
+                ) {
+                    item.fill.source = item.src;
+                }
+                if (Array.isArray(item.objects)) walk(item.objects);
+            });
+        };
+        if (json && Array.isArray(json.objects)) walk(json.objects);
+        return json;
+    }
     // 资源去重：把"重复出现 ≥2 次的相同图片 src"提升为顶层 assets 清单，
     // 对象改为 assetId 引用（不内联 src），供渲染器统一加载与缓存。
     // 唯一 src（只出现一次）保持内联，避免清单反而膨胀。
     _applyAssetManifest(json) {
         if (!json || !Array.isArray(json.objects)) return;
+        // 变量 src（含占位符）不是静态资源，不参与去重（否则替换成 assetId 后变量丢失）
+        const vp = this.editor.getPlugin && this.editor.getPlugin('VariablePlugin');
+        const isVariableSrc = (src) =>
+          !!(vp && vp.containsVariable && typeof src === 'string' && vp.containsVariable(src));
         const count = new Map();
         const walk = (items) => {
             if (!Array.isArray(items)) return;
             items.forEach((item) => {
                 if (!item || typeof item !== 'object') return;
-                if (item.type === 'image' && typeof item.src === 'string' && item.src) {
+                if (
+                    item.type === 'image' &&
+                    typeof item.src === 'string' &&
+                    item.src &&
+                    !isVariableSrc(item.src)
+                ) {
                     count.set(item.src, (count.get(item.src) || 0) + 1);
                 }
                 if (Array.isArray(item.objects)) walk(item.objects);
@@ -252,7 +286,11 @@ class ServersPlugin {
             if (!Array.isArray(items)) return;
             items.forEach((item) => {
                 if (!item || typeof item !== 'object') return;
-                if (item.type === 'image' && typeof item.src === 'string') {
+                if (
+                    item.type === 'image' &&
+                    typeof item.src === 'string' &&
+                    !isVariableSrc(item.src)
+                ) {
                     const id = idOf.get(item.src);
                     if (id) {
                         delete item.src;
@@ -291,6 +329,9 @@ class ServersPlugin {
             'gradientAngle',
             'selectable',
             'hasControls',
+            // evented 必须序列化：workspace/背景图 evented:false 否则 undo/redo、
+            // 加载恢复后回退为 fabric 默认 true，系统层会重新响应鼠标（表现为可被选中编辑）
+            'evented',
             'editable',
             'extensionType',
             'extension',
@@ -299,6 +340,9 @@ class ServersPlugin {
             'backgroundImageMode',
             'backgroundPosition',
             'isVariableImage',
+            'isVariableBackground',
+            // 背景图统一以 src 为唯一事实来源（tile 形态是 rect，fabric.Rect 不内置序列化 src）
+            'src',
             'follow',
         ];
     }

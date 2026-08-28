@@ -106,3 +106,12 @@ export function createBackgroundObject({ img, layout, mode, position }) {
     scaleY: layout.scaleY,
   });
 }
+
+// 保留 Rect 引用重建 Pattern 填充（tile 变量背景换图/还原共用）：
+// 直接 bg.set('fill', new Pattern) 并置 dirty，避免重建对象丢失引用。
+export function replaceTilePatternSource(bg, imgEl, repeat = 'repeat') {
+  if (!bg || !imgEl) return bg;
+  bg.set('fill', new fabric.Pattern({ source: imgEl, repeat }));
+  bg.dirty = true;
+  return bg;
+}

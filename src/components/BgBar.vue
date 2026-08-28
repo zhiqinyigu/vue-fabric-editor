@@ -29,13 +29,14 @@
         <!-- 已设置：预览(左) + 操作列(右) -->
         <div v-else class="bg-image-body">
           <div class="bg-image-preview" title="点击更换" @click="openBackgroundImage">
-            <img :src="bgImageUrl" alt="background" />
+            <img v-if="!bgIsVariable" :src="bgImageUrl" alt="background" />
+            <div v-else class="bg-image-var-preview">{{ bgVariableLabel }}</div>
           </div>
           <div class="bg-image-actions">
             <Button size="small" icon="ios-refresh" @click="openBackgroundImage">
               {{ $t('bgSeting.reUpload') }}
             </Button>
-            <Button size="small" icon="ios-expand" @click="fitCanvasToBg">
+            <Button size="small" icon="ios-expand" :disabled="bgIsVariable" @click="fitCanvasToBg">
               {{ $t('bgSeting.fitCanvas') }}
             </Button>
             <Button size="small" icon="ios-trash-outline" @click="removeBgImage">
@@ -96,13 +97,14 @@
 
 <script>
 // import workspaceMask from './workspaceMask.vue';
-import { ref, onMounted, onUnmounted } from '@vue/composition-api';
+import { ref, computed, onMounted, onUnmounted } from '@vue/composition-api';
 import useSelect from '@/hooks/select';
 import useImagePicker from '@/hooks/useImagePicker';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
 import { parseGradient } from '@/components/vue-color-palette-vue2';
 import { RGBA2HexA } from './color-picker/utils/color.js';
+import { extractVariablesFromString, DEFAULT_DELIMITER } from '@/core/variableEngine';
 
 export default {
   name: 'BgBar',
@@ -161,12 +163,27 @@ export default {
 
     // 画布尺寸同步为背景图原始尺寸
     const fitCanvasToBg = () => {
+      if (bgIsVariable.value) return; // 变量背景真实尺寸未知，禁止按背景定画布
       canvasEditor.fitCanvasToBackground();
     };
 
+    // 背景图是否为"模板变量"（真实 URL 未知，预览以占位呈现；fitCanvas 禁用）。
+    // 依赖响应式的 bgImageUrl 触发重算（canvasEditor 非响应式，纯调用不追踪变化）：
+    // loadJson 回显/选图设置背景时都会先更新 bgImageUrl，再读取核心层的变量标记
+    const bgIsVariable = computed(() => {
+      if (!bgImageUrl.value) return false;
+      const info = canvasEditor.getBackgroundImage && canvasEditor.getBackgroundImage();
+      return !!(info && info.variable);
+    });
+    // 变量背景在预览区显示的变量名（如 "user.bg"）
+    const bgVariableLabel = computed(() => {
+      const vars = extractVariablesFromString(bgImageUrl.value, DEFAULT_DELIMITER);
+      return vars.join(', ') || 'variable';
+    });
+
     const changeBgMode = (mode) => {
       if (bgImageUrl.value) {
-        canvasEditor.setBackgroundImage(bgImageUrl.value, mode, bgPosition.value);
+        canvasEditor.setBackgroundMode(mode);
       }
     };
 
@@ -394,6 +411,8 @@ export default {
       setBgPosition,
       changeBgOpacity,
       fitCanvasToBg,
+      bgIsVariable,
+      bgVariableLabel,
     };
   },
 };
@@ -479,6 +498,19 @@ export default {
     max-height: 100%;
     object-fit: contain;
   }
+}
+.bg-image-var-preview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  box-sizing: border-box;
+  color: #9099a3;
+  font-size: 12px;
+  text-align: center;
+  word-break: break-all;
 }
 .bg-image-actions {
   flex: 1;

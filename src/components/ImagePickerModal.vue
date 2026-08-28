@@ -151,6 +151,11 @@ export default {
     // - 插入/更换元素：读当前选中图片对象（getSrc 对变量图返回变量 URL）
     const getCurrentSrc = () => {
       try {
+        if (pickerState.mode === 'background') {
+          const info = canvasEditor.getBackgroundImage && canvasEditor.getBackgroundImage();
+          const src = info && info.src;
+          return isValidPrefill(src) ? src : '';
+        }
         const active = canvasEditor.canvas && canvasEditor.canvas.getActiveObject();
         if (active && active.type === 'image' && active.getSrc) {
           const src = active.getSrc();
@@ -250,12 +255,18 @@ export default {
         Message.error($t('insertFile.insert_online_image_invalid'));
         return;
       }
-      // 模板变量仅对"插入元素"生效（背景当作普通URL处理）
-      if (isVariableUrl && pickerState.mode !== 'background') {
+      // 变量 URL：插入元素创建占位图；背景走 onDone 由 BgBar 分流到 setBackgroundVariableImage
+      if (isVariableUrl) {
         Message.info($t('variable.url_is_dynamic'));
         if (convertToLocal.value) {
           Message.warning($t('variable.cannot_convert_local'));
           convertToLocal.value = false;
+        }
+        if (pickerState.mode === 'background') {
+          runDone(src, { variable: true });
+          resetInputs();
+          closeImagePicker();
+          return;
         }
         try {
           const imgItem = await canvasEditor.createVariableImage(src);

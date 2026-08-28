@@ -5,6 +5,7 @@
  * @LastEditTime: 2024-07-12 21:35:16
  * @Description: 历史记录插件（undo/redo 状态管理）
  */
+import { enforceSystemObjectsReadonly } from '../jsonOptimizer';
 import diagnoseSerializeError from '../utils/serializeDiagnose';
 
 class HistoryPlugin {
@@ -81,16 +82,14 @@ class HistoryPlugin {
     }
     // 加载状态
     _loadState(state, eventName, callback) {
-        var _a;
+
         this.isLoading = true;
         this.isProcessing = true;
-        // 处理 workspace 的特殊情况
-        const parsedState = JSON.parse(state);
-        const workspace = (_a = parsedState.objects) === null || _a === void 0 ? void 0 : _a.find((item) => item.id === 'workspace');
-        if (workspace) {
-            workspace.evented = false;
-        }
-        this.canvas.loadFromJSON(state, () => {
+        // 先解析再补齐系统层只读属性后加载（历史上 patch 的是 parsedState 而加载的是原字符串，补丁实际不生效）。
+        // 快照不携带 evented 等运行态属性，直接 loadFromJSON 会让 workspace/背景图恢复默认可交互，
+        // 表现为背景图像普通图片一样能被命中/编辑。
+        const parsedState = enforceSystemObjectsReadonly(JSON.parse(state));
+        this.canvas.loadFromJSON(parsedState, () => {
             this.canvas.renderAll();
             this.canvas.fire(eventName);
             // 通知 UI/插件快照已恢复（loadJson 仅模板加载路径触发，undo/redo 需独立通知）；

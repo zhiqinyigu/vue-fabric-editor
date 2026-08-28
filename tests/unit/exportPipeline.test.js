@@ -4,6 +4,7 @@
  * - getJson(true) 完整：不精简、保留 example
  * - saveJson()：完整导出 + 2 空格缩进
  * - clipboard()：最小化导出 + 紧凑 JSON
+ * - 变量背景（tile）：最小化导出顶替 fill.source 为变量 URL；完整导出保留占位 base64（D8）
  */
 import { fabric } from 'fabric';
 import '../../src/core/objects/CustomTextbox';
@@ -132,5 +133,54 @@ describe('ServersPlugin 导出管线双模式', () => {
     expect(tb.opacity).toBe(1);
     // example 已永久剔除，不会补回（符合预期）
     expect('example' in restored.variableMeta.variables[0]).toBe(false);
+  });
+});
+
+describe('ServersPlugin 变量背景（tile）序列化顶替策略（D8）', () => {
+  const PLACEHOLDER_BG = 'data:image/png;base64,PLACEHOLDERBG';
+  // 模拟编辑期占位图元素：Pattern source 是占位图 base64（fabric Pattern.toObject 取其 .src）
+  function makePlaceholderEl() {
+    const el = document.createElement('img');
+    Object.defineProperty(el, 'src', { value: PLACEHOLDER_BG, configurable: true });
+    return el;
+  }
+  // 构造编辑期 tile 变量背景：src 为变量 URL，fill.source 是占位图 Pattern
+  function addVariableTileBackground(canvas) {
+    const bg = new fabric.Rect({
+      id: 'backgroundImage',
+      left: 0,
+      top: 0,
+      width: 300,
+      height: 400,
+      backgroundImageMode: 'tile',
+      isVariableBackground: true,
+      src: '{{user.bg}}',
+      fill: new fabric.Pattern({ source: makePlaceholderEl(), repeat: 'repeat' }),
+    });
+    canvas.add(bg);
+    return bg;
+  }
+
+  it('getJson() 最小化导出：fill.source 顶替为变量 URL，JSON 无占位 base64', () => {
+    const { canvas, plugin } = createEditor();
+    addVariableTileBackground(canvas);
+    const json = plugin.getJson();
+    const bg = json.objects.find((o) => o.id === 'backgroundImage');
+    expect(bg).toBeTruthy();
+    expect(bg.isVariableBackground).toBe(true); // getExtensionKey 已登记
+    expect(bg.src).toBe('{{user.bg}}'); // Rect 形态的 src 依赖扩展键登记
+    expect(bg.fill.source).toBe('{{user.bg}}'); // Pattern 仅为派生渲染结果
+    expect(JSON.stringify(json)).not.toContain('PLACEHOLDERBG'); // 无占位 base64
+  });
+
+  it('getJson(true) 完整导出（saveJson 下载）：不做顶替，保留占位图 base64（D8，预期）', () => {
+    // 设计约定 D8（plans/variable-bg.md）：完整导出是编辑器自包含形态，不做变量 URL 顶替，
+    // 重新导入即由 WorkspacePlugin/VariablePlugin 还原占位；仅最小化导出（上一条用例）顶替。
+    const { canvas, plugin } = createEditor();
+    addVariableTileBackground(canvas);
+    const full = plugin.getJson(true);
+    const bg = full.objects.find((o) => o.id === 'backgroundImage');
+    expect(bg.src).toBe('{{user.bg}}'); // 变量 URL 仍在 src（唯一事实来源）
+    expect(String(bg.fill.source)).toContain('PLACEHOLDERBG'); // fill.source 保留占位图
   });
 });

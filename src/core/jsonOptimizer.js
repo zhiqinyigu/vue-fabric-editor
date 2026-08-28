@@ -67,6 +67,27 @@ export function normalizeCanvasDefaults(json) {
   return json;
 }
 
+// 系统层对象（workspace / 背景图）运行态只读属性。
+// evented/lockMovement/hoverCursor 不随 JSON 持久化（或历史快照未含），恢复后回退 fabric
+// 默认值会导致系统层重新响应鼠标（背景图像普通图片一样可命中/可编辑）。
+// 历史记录 undo/redo 等不走 loadJSON 管线（无 hookImportAfter 兜底）的加载路径在恢复前调用。
+// 属性集与 workspaceGeometry.createBackgroundObject 的 base / WorkspacePlugin.hookImportAfter 保持一致。
+export function enforceSystemObjectsReadonly(json) {
+  if (!json || !Array.isArray(json.objects)) return json;
+  json.objects.forEach((o) => {
+    if (!o || typeof o !== 'object') return;
+    if (o.id === 'workspace' || o.id === 'backgroundImage') {
+      o.selectable = false;
+      o.evented = false;
+      o.hasControls = false;
+      o.hoverCursor = 'default';
+      o.lockMovementX = true;
+      o.lockMovementY = true;
+    }
+  });
+  return json;
+}
+
 // 给 http(s)/协议相对的远程图片补 crossOrigin（已显式设置的保持不变；data: 不需要）。
 // 避免 canvas 被远程图片污染（Tainted canvas）导致 toDataURL 导出 SecurityError。
 // 编辑器与前台渲染器共用，保证两端加载远程图行为一致。

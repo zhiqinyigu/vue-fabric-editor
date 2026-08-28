@@ -5,7 +5,10 @@ module.exports = {
   moduleFileExtensions: ['js', 'json'],
   moduleNameMapper: {
     '^canvas$': '<rootDir>/tests/__mocks__/canvas.js',
+    '\\.(svg|png|jpg|jpeg|gif|webp)$': '<rootDir>/tests/__mocks__/assetStub.js',
+    // .css 样式（ContextMenu 等编辑器链路）node 测试环境吞掉
+    '\\.(css|less)$': '<rootDir>/tests/__mocks__/assetStub.js',
   },
-  // lodash-es 是 ESM 包，需经 babel 转换
-  transformIgnorePatterns: ['node_modules/(?!lodash-es)'],
+  // lodash-es / @webtoon/psd 等 ESM 包需经 babel 转换
+  transformIgnorePatterns: ['node_modules/(?!(lodash-es|@webtoon/psd))'],
 };

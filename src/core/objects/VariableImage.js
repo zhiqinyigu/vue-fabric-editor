@@ -111,4 +111,21 @@ fabric.VariableImage = fabric.util.createClass(fabric.Image, {
 fabric.VariableImage.fromObject = function (object, callback) {
   return fabric.Image.fromObject(object, callback);
 };
+
+// 挂载"占位叠加层"（边框 + 变量名实时矢量绘制，type 保持原样）。
+// image 形态以 fabric.Image 渲染为底；rect（tile 背景）以 Rect 渲染为底（含 Pattern 填充）。
+// 供 VariablePlugin 与 WorkspacePlugin（变量背景）共用。
+export function attachVariableOverlay(obj) {
+  if (!obj || obj._variableOverlayAttached) return obj;
+  obj._variableOverlayAttached = true;
+  obj.set('showPlaceholderText', true);
+  const baseRender =
+    obj.type === 'rect' ? fabric.Rect.prototype._render : fabric.Image.prototype._render;
+  obj._render = function (ctx) {
+    baseRender.call(this, ctx);
+    fabric.VariableImageOverlay.draw(ctx, this);
+  };
+  return obj;
+}
+
 export default fabric.VariableImage;

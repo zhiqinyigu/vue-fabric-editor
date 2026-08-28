@@ -29,6 +29,16 @@ global.Image = dom.window.Image;
 global.getComputedStyle = dom.window.getComputedStyle;
 global.MouseEvent = dom.window.MouseEvent;
 
+// Editor 链路（FlipPlugin → language/index）读取 localStorage；node 环境补内存版。
+// 注意：JSDOM opaque origin 下访问 window.localStorage 会抛 SecurityError，故直接挂 global
+const lsStore = new Map();
+global.localStorage = {
+  getItem: (k) => (lsStore.has(k) ? lsStore.get(k) : null),
+  setItem: (k, v) => lsStore.set(k, String(v)),
+  removeItem: (k) => lsStore.delete(k),
+  clear: () => lsStore.clear(),
+};
+
 // 兜底：若 jsdom 未暴露 HTMLCanvasElement，构造一个（让 fabric 测量可用）
 const CanvasCtor =
   (dom.window.HTMLCanvasElement && dom.window.HTMLCanvasElement) ||

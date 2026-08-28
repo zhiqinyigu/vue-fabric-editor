@@ -8,10 +8,12 @@
 import { fabric } from 'fabric';
 import { throttle } from 'lodash-es';
 import { appendCacheBustParam } from '../assetUrl';
+import { attachVariableOverlay } from '../objects/VariableImage';
 import {
   computeBackgroundLayout,
   cloneWorkspaceAsClip,
   createBackgroundObject,
+  replaceTilePatternSource,
 } from '../workspaceGeometry';
 class WorkspacePlugin {
   constructor(canvas, editor) {
@@ -23,6 +25,8 @@ class WorkspacePlugin {
     this.backgroundImagePosition = { x: 0.5, y: 0.5 };
     this.backgroundImageOpacity = 1;
     this.backgroundImageSize = null;
+    // 变量背景标记：真实尺寸未知，设计期以占位图呈现，禁止触发"真实 URL 重载"
+    this.backgroundImageVariable = false;
     this.init({
       width: 900,
       height: 1200,
@@ -58,8 +62,19 @@ class WorkspacePlugin {
           this.editor.emit('sizeChange', workspace.width, workspace.height);
         }
       }
+      // 背景图同样禁止选中/编辑（兜底：旧模板 JSON 未持久化 evented/hasControls，
+      // 且历史记录 undo/redo 等不走本钩子的加载路径需自行补齐，见 jsonOptimizer.enforceSystemObjectsReadonly）
+      const bg = this._getBackgroundImageObj();
+      if (bg) {
+        bg.set('selectable', false);
+        bg.set('evented', false);
+        bg.set('hasControls', false);
+        bg.set('hoverCursor', 'default');
+      }
       // 记录从 JSON 加载的背景图数据，供后续 resize 同步
       this._captureBackgroundImage();
+      // 变量背景（tile 形态）还原编辑态占位呈现
+      this._restoreVariableBackgroundAfterImport();
       resolve('');
     });
   }
@@ -234,6 +249,12 @@ class WorkspacePlugin {
     if (!workspace || !dataUrl) {
       return;
     }
+    // 变量背景分流：src 含变量时走占位呈现（真实图以预览/渲染为准）
+    const vp = this.editor.getPlugin && this.editor.getPlugin('VariablePlugin');
+    if (vp && vp.containsVariable && vp.containsVariable(dataUrl)) {
+      this.setBackgroundVariableImage(dataUrl, mode, position);
+      return;
+    }
     // 移除旧的（会重置状态）
     this.removeBackgroundImage();
     this.backgroundImageMode = mode;
@@ -275,6 +296,60 @@ class WorkspacePlugin {
     };
     img.src = requestUrl;
   }
+  // 设置"变量背景"：以占位图铺满呈现（纯色底 + 矢量变量名叠加层），
+  // src 保留变量 URL（序列化输出变量串而非占位 base64）；真实宽高比以预览/渲染为准。
+  setBackgroundVariableImage(dataUrl, mode = 'cover', position) {
+    const workspace = this.getWorkspase();
+    const vp = this.editor.getPlugin && this.editor.getPlugin('VariablePlugin');
+    if (!workspace || !dataUrl || !vp || typeof vp._makePlaceholder !== 'function') {
+      return;
+    }
+    this.removeBackgroundImage();
+    this.backgroundImageMode = mode;
+    this.backgroundImagePosition = position || { x: 0.5, y: 0.5 };
+    this.backgroundImageVariable = true;
+    fabric.util.loadImage(
+      vp._makePlaceholder(),
+      (imgEl, isError) => {
+        if (isError || !imgEl) {
+          this.backgroundImageVariable = false;
+          return;
+        }
+        const imgSize = {
+          w: imgEl.naturalWidth || imgEl.width || 0,
+          h: imgEl.naturalHeight || imgEl.height || 0,
+        };
+        const layout = computeBackgroundLayout({
+          workspace,
+          imageSize: imgSize,
+          mode,
+          position: this.backgroundImagePosition,
+        });
+        if (!layout) {
+          this.backgroundImageVariable = false;
+          return;
+        }
+        const bgObj = createBackgroundObject({ img: imgEl, layout, mode, position: this.backgroundImagePosition });
+        bgObj.set('src', dataUrl);
+        bgObj.set('isVariableBackground', true);
+        bgObj.set('variableLabel', vp._extractVariableLabel(dataUrl));
+        bgObj.set('showPlaceholderText', true);
+        attachVariableOverlay(bgObj);
+        if (vp._patchGetSrc) vp._patchGetSrc(bgObj);
+        const wsIndex = this.canvas.getObjects().indexOf(workspace);
+        this.canvas.insertAt(bgObj, wsIndex + 1);
+        bgObj.set('opacity', this.backgroundImageOpacity);
+        // 占位图尺寸作为设计期几何基准（真实尺寸未知；tile 形态不依赖尺寸）
+        this.backgroundImageSize = imgSize;
+        this.canvas.requestRenderAll();
+        if (this.editor.saveState) {
+          this.editor.saveState();
+        }
+      },
+      this,
+      'anonymous'
+    );
+  }
   // 计算背景对象布局（cover/contain 用 Image 的缩放与对齐，tile 用 Rect 铺满）
   // 供创建与就地同步复用；依赖 this.backgroundImageSize（原始像素尺寸）
   // （已抽取至 workspaceGeometry.computeBackgroundLayout 共享，供渲染器复用）
@@ -305,10 +380,25 @@ class WorkspacePlugin {
     if (!obj || !workspace) return;
     const mode = obj.backgroundImageMode || this.backgroundImageMode || 'cover';
     const position = obj.backgroundPosition || this.backgroundImagePosition || { x: 0.5, y: 0.5 };
-    const layout = this._computeBackgroundLayout(workspace, mode, position);
+    // 变量背景：优先用画布上元素的实时自然尺寸（预览期为真实图、设计期为占位图），
+    // 否则预览期 autoGrow 增高时会按占位图尺寸算 scale（真实图会显示错）
+    const imageSize = this.backgroundImageVariable
+      ? this._getLiveBackgroundSize(obj)
+      : this.backgroundImageSize;
+    const layout = computeBackgroundLayout({ workspace, imageSize, mode, position });
     if (!layout) return;
     obj.set(layout);
     if (obj.setCoords) obj.setCoords();
+  }
+  // 读取背景对象当前元素的自然尺寸（image 形态）；失败回退设计期基准
+  _getLiveBackgroundSize(obj) {
+    if (obj && obj.type === 'image' && obj._element) {
+      const el = obj._element;
+      const w = el.naturalWidth || el.width || 0;
+      const h = el.naturalHeight || el.height || 0;
+      if (w > 0 && h > 0) return { w, h };
+    }
+    return this.backgroundImageSize;
   }
   // 就地更新背景图对齐方式（不重载图片）
   setBackgroundPosition(x, y) {
@@ -338,6 +428,7 @@ class WorkspacePlugin {
     this.backgroundImageMode = 'cover';
     this.backgroundImagePosition = { x: 0.5, y: 0.5 };
     this.backgroundImageSize = null;
+    this.backgroundImageVariable = false;
     this.canvas.requestRenderAll();
   }
   // 背景图透明度（0-1）
@@ -368,17 +459,59 @@ class WorkspacePlugin {
       mode,
       position: obj.backgroundPosition || this.backgroundImagePosition || { x: 0.5, y: 0.5 },
       opacity: obj.opacity,
+      variable: this.backgroundImageVariable,
     };
+  }
+  // 导入后还原变量背景的编辑态呈现：
+  // - image 形态由 VariablePlugin._restoreVariableImages 通用还原（占位图 + 叠加层）
+  // - tile 形态（rect）：JSON 的 fill.source 是变量 URL（保存时顶替了占位 base64），
+  //   fabric 直接加载必然失败，这里用占位图重建 Pattern，保证编辑态可见
+  _restoreVariableBackgroundAfterImport() {
+    const obj = this._getBackgroundImageObj();
+    if (!obj || !(obj.get && obj.get('isVariableBackground') === true)) return;
+    const vp = this.editor.getPlugin && this.editor.getPlugin('VariablePlugin');
+    const src = obj.get('src');
+    if (!vp || obj.type !== 'rect' || typeof src !== 'string' || !vp.containsVariable(src)) return;
+    fabric.util.loadImage(
+      vp._makePlaceholder(),
+      (imgEl, isError) => {
+        if (isError || !imgEl) return;
+        replaceTilePatternSource(obj, imgEl, obj.fill && obj.fill.repeat);
+        obj.dirty = true;
+        this.canvas.requestRenderAll();
+      },
+      this,
+      'anonymous'
+    );
   }
   // 画布尺寸调整为背景图原始尺寸
   fitCanvasToBackground() {
+    if (this.backgroundImageVariable) return; // 变量背景真实尺寸未知，禁止按背景定画布
     const size = this.backgroundImageSize;
     if (size && size.w && size.h) {
       this.setSize(size.w, size.h);
     }
   }
+  // 就地更新背景图模式（不重载图片；变量背景亦安全，避免变量 URL 重建失败）
+  setBackgroundMode(mode) {
+    this.backgroundImageMode = mode;
+    const obj = this._getBackgroundImageObj();
+    if (obj) {
+      obj.set('backgroundImageMode', mode);
+      this._syncBackgroundImageSilent();
+      this.canvas.requestRenderAll();
+      if (this.editor.saveState) {
+        this.editor.saveState();
+      }
+    }
+  }
   // 画布尺寸变化后同步背景图
   _syncBackgroundImage() {
+    if (this.backgroundImageVariable) {
+      // 变量背景跳过异步重建（变量 URL 无法直接加载，重建即失败丢背景），就地同步占位布局
+      this._syncBackgroundImageSilent();
+      return;
+    }
     if (this.backgroundImageDataUrl) {
       this.setBackgroundImage(
         this.backgroundImageDataUrl,
@@ -401,7 +534,10 @@ class WorkspacePlugin {
       this.backgroundImageMode = info.mode;
       this.backgroundImagePosition = info.position;
       this.backgroundImageOpacity = info.opacity != null ? info.opacity : 1;
+      // 变量标记从背景对象的序列化属性恢复（info.variable 是 backgroundImageVariable 自身，
+      // 不能用来自赋值，否则导入变量背景后标记永远为 false）
       const obj = this._getBackgroundImageObj();
+      this.backgroundImageVariable = !!(obj && obj.get && obj.get('isVariableBackground') === true);
       if (obj && obj.type === 'image') {
         const el = obj._element;
         this.backgroundImageSize = {
@@ -418,6 +554,7 @@ class WorkspacePlugin {
     } else {
       this.backgroundImageDataUrl = null;
       this.backgroundImageSize = null;
+      this.backgroundImageVariable = false;
     }
   }
   // 清空背景图状态（画布 clear 时调用）
@@ -427,6 +564,7 @@ class WorkspacePlugin {
     this.backgroundImagePosition = { x: 0.5, y: 0.5 };
     this.backgroundImageOpacity = 1;
     this.backgroundImageSize = null;
+    this.backgroundImageVariable = false;
   }
   _bindWheel() {
     this.canvas.on('mouse:wheel', function (opt) {
@@ -460,6 +598,8 @@ WorkspacePlugin.apis = [
   'setWorkspaseBg',
   'setCenterFromObject',
   'setBackgroundImage',
+  'setBackgroundVariableImage',
+  'setBackgroundMode',
   'setBackgroundPosition',
   'removeBackgroundImage',
   'setBackgroundOpacity',

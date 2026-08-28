@@ -16,6 +16,7 @@ import {
 // 编辑器 getExtensionKey 会额外序列化的字段（测试中与表对齐用）
 const EXTRA_KEYS = [
   'selectable',
+  'evented',
   'hasControls',
   'isVariableImage',
   'editable',

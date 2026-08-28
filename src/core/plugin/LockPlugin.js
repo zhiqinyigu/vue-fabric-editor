@@ -147,6 +147,8 @@ class LockPlugin {
     }
     hookImportAfter() {
         this.canvas.forEachObject((obj) => {
+            // 系统层（工作区/背景图）不可选中、不可编辑，导入后不应被选中并显示锁图标/属性面板
+            if (obj.id === 'workspace' || obj.id === 'backgroundImage') return;
             if (obj.hasControls === false && obj.selectable === false) {
                 this.canvas.setActiveObject(obj);
                 this.lock();

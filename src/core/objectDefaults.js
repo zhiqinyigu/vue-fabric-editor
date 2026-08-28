@@ -47,6 +47,7 @@ const COMMON = {
   // 注意：仅收录"对象上真实存在的 fabric 属性"（selectable/hasControls 默认 true）；
   // 未设置的扩展键（isVariableImage / roundValue 等默认 undefined）不会出现在序列化结果中，不入表。
   selectable: true,
+  evented: true,
   hasControls: true,
 };
 

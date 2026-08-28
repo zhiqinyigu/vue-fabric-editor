@@ -101,6 +101,13 @@ export default {
         // 「按接入域名分片缓存」配置透传：默认 feDomain=location.hostname，传 false 关闭，传 { param, getValue } 自定义
         cacheBust: props.options.cacheBust,
       });
+      // 背景图加载失败（CORS/URL 失效）→ 默认 console 警告 + 转发 renderer-error 事件，
+      // 宿主可自行监听覆盖（如 toast 提示）
+      core.on('renderer:error', (payload) => {
+        // eslint-disable-next-line no-console
+        console.warn('[FabricRenderer]', payload);
+        emit('renderer-error', payload);
+      });
       emit('ready', { core, canvas });
       render();
     });

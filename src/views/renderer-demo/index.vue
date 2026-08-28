@@ -2,21 +2,19 @@
   <div class="renderer-demo">
     <div class="rd-side">
       <Card dis-hover>
-        <p slot="title">变量数据</p>
+        <p slot="title">变量数据（按 JSON 动态枚举）</p>
         <div class="rd-form">
-          <label class="rd-label">标题（{{ nameToken }}）</label>
-          <Input v-model="data.name" placeholder="标题文字" />
-          <label class="rd-label">正文（{{ contentToken }}，autoGrow 增高）</label>
-          <Input
-            v-model="data.content"
-            type="textarea"
-            :rows="3"
-            placeholder="正文内容，变长时海报随之增高"
-          />
-          <label class="rd-label">头像 URL（{{ avatarToken }}，变量图片）</label>
-          <Input v-model="data.avatar" placeholder="https://picsum.photos/seed/a/240/160" />
-          <label class="rd-label">二维码内容（{{ qrToken }}）</label>
-          <Input v-model="data.qr" placeholder="https://example.com" />
+          <template v-if="variables.length">
+            <div v-for="path in variables" :key="path" class="rd-field">
+              <label class="rd-label">{{ tokenOf(path) }}</label>
+              <Input
+                :value="data[path]"
+                :placeholder="tokenOf(path)"
+                @input="(v) => setVar(path, v)"
+              />
+            </div>
+          </template>
+          <p v-else class="rd-status">JSON 中未检测到变量占位符</p>
         </div>
       </Card>
 
@@ -58,15 +56,17 @@
         @ready="onReady"
         @rendered="onRendered"
         @error="onError"
+        @renderer-error="onRendererError"
       />
     </div>
   </div>
 </template>
 
 <script>
-import { reactive, ref } from '@vue/composition-api';
+import { ref, computed, watch } from '@vue/composition-api';
 import { Card, Input, Button, Message } from 'view-design';
 import FabricRenderer from '@/lib/FabricRenderer.vue';
+import { extractVariables, DEFAULT_DELIMITER } from '@/core/variableEngine';
 
 // 示例海报 JSON（编辑器 getJson 输出，含变量占位 / autoGrow / follow / 二维码 / 变量图片）
 function makePosterJson() {
@@ -83,6 +83,21 @@ function makePosterJson() {
         fill: '#ffffff',
         selectable: false,
         hasControls: false,
+      },
+      {
+        type: 'image',
+        id: 'backgroundImage',
+        left: 0,
+        top: 0,
+        width: 360,
+        height: 640,
+        src: '{{bg}}',
+        crossOrigin: 'anonymous',
+        isVariableBackground: true,
+        backgroundImageMode: 'cover',
+        backgroundPosition: { x: 0.5, y: 0.5 },
+        selectable: false,
+        evented: false,
       },
       {
         type: 'rect',
@@ -179,6 +194,7 @@ function makePosterJson() {
         { name: 'name', example: '活动海报' },
         { name: 'content', example: '这里是一段正文' },
         { name: 'avatar', example: 'https://picsum.photos/seed/a/240/160' },
+        { name: 'bg', example: 'https://picsum.photos/seed/bg/720/1280' },
         { name: 'qr', example: 'https://example.com' },
       ],
     },
@@ -191,19 +207,11 @@ export default {
   setup() {
     const json = ref(makePosterJson());
     const pasteJson = ref('');
-    const data = reactive({
-      name: '夏日促销活动',
-      content: '全场商品低至五折起，多买多送，快来选购吧！',
-      avatar: 'https://picsum.photos/seed/poster/240/160',
-      qr: 'https://example.com',
-    });
+    // 变量数据：扁平映射表 path -> value（renderObjects/getValueByPath 支持顶层完整路径 key）
+    const data = ref({});
     const status = ref('待渲染');
     const renderer = ref(null);
     const renderKey = ref(0);
-    const nameToken = '{{name}}';
-    const contentToken = '{{content}}';
-    const avatarToken = '{{avatar}}';
-    const qrToken = '{{qr}}';
     let core = null;
 
     const adapters = {
@@ -215,6 +223,49 @@ export default {
           ]),
       },
     };
+
+    // 按当前 JSON 动态枚举变量路径（含 group.objects / 背景 rect 的 fill.source）
+    const variables = computed(() => extractVariables(json.value || {}));
+    const delimiterOf = () => {
+      const meta = json.value && json.value.variableMeta && json.value.variableMeta.delimiter;
+      return meta && meta.start !== undefined ? meta : DEFAULT_DELIMITER;
+    };
+    const tokenOf = (path) => {
+      const d = delimiterOf();
+      return `${d.start}${path}${d.end}`;
+    };
+
+    // 重建数据表：为每个变量留一个字段；已填值保留，新变量补空，多余字段清掉
+    const rebuildData = (seedExamples) => {
+      const prev = data.value || {};
+      const next = {};
+      variables.value.forEach((path) => {
+        next[path] = prev[path] !== undefined ? prev[path] : '';
+      });
+      // 用 variableMeta.variables[].example 作为示例值（仅首次/空值时回填）
+      if (seedExamples) {
+        const meta = json.value && json.value.variableMeta;
+        if (meta && Array.isArray(meta.variables)) {
+          meta.variables.forEach((v) => {
+            if (v && typeof v.path === 'string' && v.example !== undefined && next[v.path] === '') {
+              next[v.path] = v.example;
+            }
+          });
+        }
+      }
+      data.value = next;
+    };
+    const setVar = (path, value) => {
+      data.value = { ...data.value, [path]: value };
+    };
+
+    // JSON 变化 → 重新枚举变量并重建数据表
+    watch(
+      () => json.value,
+      () => rebuildData(true),
+      { deep: false }
+    );
+    rebuildData(true);
 
     const onReady = ({ core: c }) => {
       core = c;
@@ -228,6 +279,11 @@ export default {
     const onError = (e) => {
       status.value = '渲染失败：' + (e && e.message);
       Message.error(status.value);
+    };
+
+    const onRendererError = (payload) => {
+      status.value = '背景加载失败：' + (payload && payload.src);
+      Message.error('背景图加载失败（地址失效或服务器不支持 CORS）');
     };
 
     const onExport = async () => {
@@ -291,17 +347,17 @@ export default {
       json,
       pasteJson,
       data,
+      variables,
+      tokenOf,
+      setVar,
       adapters,
       status,
       renderer,
       renderKey,
-      nameToken,
-      contentToken,
-      avatarToken,
-      qrToken,
       onReady,
       onRendered,
       onError,
+      onRendererError,
       onExport,
       onRerender,
       onApplyJson,
@@ -332,6 +388,11 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.rd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .rd-label {
   font-size: 12px;

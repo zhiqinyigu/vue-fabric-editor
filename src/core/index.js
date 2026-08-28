@@ -56,7 +56,12 @@ export {
 export { default as RendererCore } from './RendererCore';
 export { default as RendererWorkspacePlugin } from './plugin/RendererWorkspacePlugin';
 export { default as RendererAutoGrowPlugin } from './plugin/RendererAutoGrowPlugin';
-export { computeBackgroundLayout, cloneWorkspaceAsClip, createBackgroundObject } from './workspaceGeometry';
+export {
+  computeBackgroundLayout,
+  cloneWorkspaceAsClip,
+  createBackgroundObject,
+  replaceTilePatternSource,
+} from './workspaceGeometry';
 import EventType from './eventType';
 import Utils from './utils/utils';
 import CustomRect from './objects/CustomRect';

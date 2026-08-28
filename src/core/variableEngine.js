@@ -31,12 +31,22 @@ const EXTENSION_FIELD = {
 };
 
 // 对象感知的"可变量字段"（支持 qrcode/barcode 的 extension 嵌套字段）
-// 优先级：扩展内容字段 > 按 type 的常规字段；供收集/渲染统一使用
+// 优先级：扩展内容字段 > 背景图（统一以 src 为唯一事实来源，tile 形态是 rect）> 按 type 的常规字段；
+// 供收集/渲染统一使用
 function getVariableFieldOfObject(obj) {
   if (!obj || typeof obj !== 'object') return [];
   const extField = obj.extensionType && EXTENSION_FIELD[obj.extensionType];
   if (extField) return [extField];
+  // 背景图（image / rect+Pattern 形态）：tile 背景是 rect，type 判断会漏掉 src
+  if (obj.id === 'backgroundImage' && typeof obj.src === 'string') return ['src'];
   return getVariableFieldsByType(obj.type);
+}
+
+// 背景图（tile 形态）的 Pattern 仅是派生渲染结果，其 source 与 src 保持一致；
+// 收集/渲染时与 src 同步替换（base64 无变量则原样保留）
+function getBackgroundPatternSource(obj) {
+  if (!obj || obj.id !== 'backgroundImage' || !obj.fill || typeof obj.fill.source !== 'string') return null;
+  return obj.fill.source;
 }
 
 // 点路径取值（安全）：支持 "extension.data" 这类嵌套路径
@@ -182,6 +192,11 @@ function collectVariablePaths(obj, delimiter, result) {
       extractVariablesFromString(value, delimiter).forEach((p) => result.add(p));
     }
   }
+  // 背景图 tile 形态的 pattern source 同步收集
+  const patternSrc = getBackgroundPatternSource(obj);
+  if (patternSrc) {
+    extractVariablesFromString(patternSrc, delimiter).forEach((p) => result.add(p));
+  }
   if (Array.isArray(obj.objects)) {
     obj.objects.forEach((child) => collectVariablePaths(child, delimiter, result));
   }
@@ -215,6 +230,11 @@ function applyRender(obj, data, delimiter) {
     if (typeof value === 'string') {
       setByPath(obj, field, render(value, data, delimiter));
     }
+  }
+  // 背景图 tile 形态：pattern source 与 src 同步替换（Pattern 为派生渲染结果）
+  const patternSrc = getBackgroundPatternSource(obj);
+  if (patternSrc) {
+    setByPath(obj, 'fill.source', render(patternSrc, data, delimiter));
   }
   if (Array.isArray(obj.objects)) {
     obj.objects.forEach((child) => applyRender(child, data, delimiter));

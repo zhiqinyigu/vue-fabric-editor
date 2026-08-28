@@ -7,7 +7,7 @@
  */
 import { v4 as uuid } from 'uuid';
 import { fabric } from 'fabric';
-import VariableImage from '../objects/VariableImage';
+import VariableImage, { attachVariableOverlay } from '../objects/VariableImage';
 import {
   DEFAULT_DELIMITER,
   containsVariable,
@@ -17,6 +17,7 @@ import {
   getByPath,
   setByPath,
 } from '../variableEngine';
+import { computeBackgroundLayout, replaceTilePatternSource } from '../workspaceGeometry';
 
 class VariablePlugin {
   constructor(canvas, editor, options) {
@@ -238,13 +239,7 @@ class VariablePlugin {
   // 普通 fabric.Image 就地升级为"变量图片渲染"：挂载叠加层 _render，type 保持 image，
   // 避免重建对象丢失画布引用与选中态（属性面板"网络图片地址"编辑后原地生效）
   _attachVariableOverlay(img) {
-    if (img._variableOverlayAttached) return;
-    img._variableOverlayAttached = true;
-    img.set('showPlaceholderText', true);
-    img._render = function (ctx) {
-      fabric.Image.prototype._render.call(this, ctx);
-      fabric.VariableImageOverlay.draw(ctx, this);
-    };
+    return attachVariableOverlay(img);
   }
   // 生成"动态变量占位图"：纯色底（240x160）
   // 边框与变量名由 VariableImage 矢量叠加层实时绘制（字号按占位符 85% 宽度动态计算），
@@ -317,7 +312,10 @@ class VariablePlugin {
   // fabric.Image.getSrc 默认取 DOM 元素 src（即占位图 base64），这里按 isVariableImage 兜底返回 this.src
   _patchGetSrc(imgEl) {
     imgEl.getSrc = function (filtered) {
-      if (this.get('isVariableImage') === true && typeof this.get('src') === 'string') {
+      if (
+        (this.get('isVariableImage') === true || this.get('isVariableBackground') === true) &&
+        typeof this.get('src') === 'string'
+      ) {
         return this.get('src');
       }
       return fabric.Image.prototype.getSrc.call(this, filtered);
@@ -586,6 +584,11 @@ class VariablePlugin {
         obj.initDimensions && obj.initDimensions();
         obj.setCoords && obj.setCoords();
       } else if (field === 'src') {
+        // 背景图：预览按真实尺寸重排 workspace 铺满布局，退出恢复占位布局
+        if (obj.id === 'backgroundImage') {
+          this._applyBackgroundPreview(obj, oldValue, toPreview, oldTransform, token);
+          return;
+        }
         // 图片：预览期按替换后 URL 加载；退出时【同步】恢复原始 src 属性，异步仅用于刷新展示
         const next = toPreview ? render(oldValue, this.testData, this.delimiter) : oldValue;
         obj.set('src', next); // 同步更新 src 属性，保证 getJson 拿到正确值
@@ -607,6 +610,53 @@ class VariablePlugin {
         this._reloadExtensionImage(obj, field, oldTransform, toPreview, token);
       }
     });
+  }
+  // 背景图变量预览/恢复：
+  // - 预览：src 替换为真实 URL → 加载真实图 → 按真实自然尺寸 + 背景 mode/position
+  //   重铺 workspace（image 形态 setElement+layout；tile 形态重建 Pattern source）
+  // - 退出：恢复快照中的占位布局（oldTransform）+ 占位图（不污染模板配置）
+  _applyBackgroundPreview(obj, oldValue, toPreview, oldTransform, token) {
+    const mode = obj.get('backgroundImageMode') || 'cover';
+    const position = obj.get('backgroundPosition') || { x: 0.5, y: 0.5 };
+    const next = toPreview ? render(oldValue, this.testData, this.delimiter) : oldValue;
+    obj.set('src', next);
+    // 退出预览：先恢复占位布局，再异步换回占位图展示资源
+    if (!toPreview && oldTransform) {
+      obj.set(oldTransform);
+    }
+    const isVariableSrc = containsVariable(next, this.delimiter);
+    const loadSrc = isVariableSrc ? this._makePlaceholder() : next;
+    fabric.util.loadImage(
+      loadSrc,
+      (imgEl, isError) => {
+        // 过期结果丢弃：加载期间若已退出预览（或重新预览），
+        // 该回调对应的画面已不属于当前状态，继续应用会覆盖编辑态占位图
+        if (token !== undefined && token !== this._previewToken) return;
+        if (isError || !imgEl) return;
+        if (mode === 'tile' || obj.type === 'rect') {
+          // tile 形态：保留 Rect，仅重建 Pattern source
+          replaceTilePatternSource(obj, imgEl, obj.fill && obj.fill.repeat);
+        } else {
+          // image 形态：按真实/占位尺寸重铺 workspace
+          const imgSize = {
+            w: imgEl.naturalWidth || imgEl.width || 0,
+            h: imgEl.naturalHeight || imgEl.height || 0,
+          };
+          if (!(imgSize.w > 0) || !(imgSize.h > 0)) return;
+          const ws = this.canvas.getObjects().find((o) => o && o.id === 'workspace');
+          const layout = computeBackgroundLayout({ workspace: ws, imageSize: imgSize, mode, position });
+          if (layout) obj.set(layout);
+          obj.setElement(imgEl);
+        }
+        obj.set('showPlaceholderText', isVariableSrc);
+        obj.dirty = true;
+        obj.setCoords && obj.setCoords();
+        this.canvas.requestRenderAll();
+        this.editor.emit('variable:previewRefresh');
+      },
+      this,
+      'anonymous'
+    );
   }
   _reloadImageSrc(img, src, oldTransform, token) {
     // 仅替换展示资源，不改变已设置的 src 属性（src 属性已由 _applySnapshot 同步设置）

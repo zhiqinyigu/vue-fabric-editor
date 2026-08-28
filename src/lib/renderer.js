@@ -44,4 +44,9 @@ export {
   stripCanvasDefaults,
 } from '@/core/jsonOptimizer';
 export { OBJECT_DEFAULTS, getDefaultsForType } from '@/core/objectDefaults';
-export { computeBackgroundLayout, cloneWorkspaceAsClip, createBackgroundObject } from '@/core/workspaceGeometry';
+export {
+  computeBackgroundLayout,
+  cloneWorkspaceAsClip,
+  createBackgroundObject,
+  replaceTilePatternSource,
+} from '@/core/workspaceGeometry';

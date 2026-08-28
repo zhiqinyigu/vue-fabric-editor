@@ -1253,3 +1253,69 @@ describe('AutoGrowPlugin 编辑态实时增高（文本变长海报跟随）', (
   });
 });
 
+
+
+describe('背景图模板变量（image / rect+Pattern 双形态）', () => {
+  function makeVarBgJson(mode) {
+    const bg =
+      mode === 'tile'
+        ? {
+            type: 'rect',
+            id: 'backgroundImage',
+            left: 0,
+            top: 0,
+            width: 600,
+            height: 800,
+            backgroundImageMode: 'tile',
+            isVariableBackground: true,
+            src: '{{user.bg}}',
+            fill: { type: 'pattern', source: '{{user.bg}}', repeat: 'repeat' },
+          }
+        : {
+            type: 'image',
+            id: 'backgroundImage',
+            left: 0,
+            top: 0,
+            width: 600,
+            height: 800,
+            backgroundImageMode: 'cover',
+            isVariableBackground: true,
+            src: '{{user.bg}}',
+          };
+    return {
+      objects: [
+        { type: 'rect', id: 'workspace', left: 0, top: 0, width: 600, height: 800 },
+        bg,
+      ],
+    };
+  }
+
+  it('getVariableFieldOfObject：背景 image 形态返回 src', () => {
+    expect(getVariableFieldOfObject({ id: 'backgroundImage', type: 'image', src: '{{a}}' })).toEqual(['src']);
+  });
+
+  it('getVariableFieldOfObject：背景 rect（tile）形态返回 src（type 判断会漏掉）', () => {
+    expect(getVariableFieldOfObject({ id: 'backgroundImage', type: 'rect', src: '{{a}}' })).toEqual(['src']);
+  });
+
+  it('extractVariables 收集背景变量（image 与 rect.fill.source 均命中）', () => {
+    expect(extractVariables(makeVarBgJson('cover'))).toEqual(['user.bg']);
+    expect(extractVariables(makeVarBgJson('tile'))).toEqual(['user.bg']);
+  });
+
+  it('renderObjects 替换背景 src（image 形态）', () => {
+    const out = renderObjects(makeVarBgJson('cover'), { user: { bg: 'https://x/bg.webp' } });
+    expect(out.objects[1].src).toBe('https://x/bg.webp');
+  });
+
+  it('renderObjects 替换背景 src 与 fill.source（tile 形态，Pattern 为派生结果）', () => {
+    const out = renderObjects(makeVarBgJson('tile'), { user: { bg: 'https://x/bg.webp' } });
+    expect(out.objects[1].src).toBe('https://x/bg.webp');
+    expect(out.objects[1].fill.source).toBe('https://x/bg.webp');
+  });
+
+  it('renderObjects 空变量 → 背景 src 置空（渲染端按 D2 无背景）', () => {
+    const out = renderObjects(makeVarBgJson('cover'), {});
+    expect(out.objects[1].src).toBe('');
+  });
+});

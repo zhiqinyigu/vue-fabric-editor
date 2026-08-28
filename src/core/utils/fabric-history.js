@@ -9,6 +9,7 @@
  * Override the initialize function for the _historyInit();
  */
 import { fabric } from 'fabric';
+import { enforceSystemObjectsReadonly } from '../jsonOptimizer';
 import diagnoseSerializeError from './serializeDiagnose';
 fabric.Canvas.prototype.initialize = (function (originalFn) {
     return function (...args) {
@@ -157,13 +158,14 @@ fabric.Canvas.prototype.redo = function (callback) {
 // loadFromJSON 是异步操作，所以通过 isLoadingHistory = true 表示历史读取中，不可 undo/redo，
 // 不然当页面复杂且快速 undo/redo 多次后，可能会在之前的历史上 redo/undo
 fabric.Canvas.prototype._loadHistory = function (history, event, callback) {
-    var _a;
     this.isLoadingHistory = true;
     var that = this;
-    // 需要把历史记录中的 workspace 的 evented 属性设置为 false，否则会导致历史记录恢复后，鼠标悬浮 workspace 出现可操作的样式
-    const workspaceHistory = (_a = history.objects) === null || _a === void 0 ? void 0 : _a.find((item) => item.id === 'workspace');
-    workspaceHistory && (workspaceHistory.evented = false);
-    this.loadFromJSON(history, function () {
+    // 快照是 JSON 字符串（未含 evented 等运行态属性），需解析后补齐系统层只读属性再加载，
+    // 否则历史恢复后 workspace/背景图回退为可交互（悬浮出现可操作样式、背景图像普通图片可编辑）
+    const parsedState = enforceSystemObjectsReadonly(
+        typeof history === 'string' ? JSON.parse(history) : history
+    );
+    this.loadFromJSON(parsedState, function () {
         that.renderAll();
         that.fire(event);
         that.historyProcessing = false;

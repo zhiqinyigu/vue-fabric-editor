@@ -599,3 +599,222 @@ describe('RendererCore autoGrow 增高（与编辑器预览一致）', () => {
     expect(ws.get('height')).toBe(400);
   });
 });
+
+
+describe('RendererCore 变量背景（替换后按真实尺寸渲染 / 失败语义）', () => {
+  function makeVarBgPoster(bgSrc, data) {
+    const json = {
+      objects: [
+        {
+          type: 'rect',
+          id: 'workspace',
+          left: 0,
+          top: 0,
+          width: 768,
+          height: 1366,
+          fill: '#ffffff',
+          selectable: false,
+          hasControls: false,
+        },
+        {
+          type: 'image',
+          id: 'backgroundImage',
+          left: 0,
+          top: 0,
+          width: 768,
+          height: 1366,
+          backgroundImageMode: 'cover',
+          isVariableBackground: true,
+          src: bgSrc,
+        },
+      ],
+    };
+    return renderObjects(json, data);
+  }
+
+  // 所有加载一律失败（空/失效 URL 均返回 naturalWidth=0 的坏元素）
+  function mockLoadImageBroken() {
+    return jest.spyOn(fabric.util, 'loadImage').mockImplementation((url, cb, thisArg) => {
+      const el = document.createElement('img');
+      Object.defineProperty(el, 'src', { value: url, writable: true, configurable: true });
+      Object.defineProperty(el, 'naturalWidth', { value: 0, writable: true, configurable: true });
+      Object.defineProperty(el, 'naturalHeight', { value: 0, writable: true, configurable: true });
+      Object.defineProperty(el, 'complete', { value: true, writable: true, configurable: true });
+      cb.call(thisArg, el, true);
+    });
+  }
+
+  it('变量背景：替换为真实 URL 后按真实尺寸 cover 重排', async () => {
+    const mock = mockLoadImageByUrl({ bg: { w: 1366, h: 768 } });
+    const { core } = createRenderer();
+    await core.loadJSON(makeVarBgPoster('{{bg}}', { bg: 'https://x/bg.webp' }));
+    autoGrowPlugin(core).apply();
+    wsPlugin(core).relayoutBackground();
+    const bg = wsPlugin(core).getBackgroundImageObj();
+    const scale = 1366 / 768; // cover 铺满高度
+    expect(bg.get('scaleX')).toBeCloseTo(scale, 4);
+    expect(bg.get('scaleY')).toBeCloseTo(scale, 4);
+    expect(bg.get('left')).toBeCloseTo((768 - 1366 * scale) / 2, 4);
+    mock.mockRestore();
+  });
+
+  it('变量为空：src 置空，fabric 丢弃背景（D2 渲染端无背景），不报错', async () => {
+    const mock = mockLoadImageBroken();
+    const { core } = createRenderer();
+    const onError = jest.fn();
+    core.on('renderer:error', onError);
+    await core.loadJSON(makeVarBgPoster('{{bg}}', {}));
+    autoGrowPlugin(core).apply();
+    await wsPlugin(core).whenImagesLoaded();
+    expect(wsPlugin(core).getBackgroundImageObj()).toBeFalsy();
+    expect(onError).not.toHaveBeenCalled();
+    mock.mockRestore();
+  });
+
+it('变量值 URL 加载失败（非空 src）→ emit renderer:error', async () => {
+    const mock = mockLoadImageBroken();
+    const { core } = createRenderer();
+    const onError = jest.fn();
+    core.on('renderer:error', onError);
+    await core.loadJSON(makeVarBgPoster('{{bg}}', { bg: 'https://x/dead.webp' }));
+    autoGrowPlugin(core).apply();
+    await wsPlugin(core).whenImagesLoaded();
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'IMAGE_LOAD_FAILED', src: 'https://x/dead.webp' })
+    );
+    mock.mockRestore();
+  });
+
+  it('变量背景 tile 形态：替换后 Pattern source 生效（rect 保留、几何铺满）', async () => {
+    const mock = mockLoadImageByUrl({ bg: { w: 1366, h: 768 } });
+    const { core } = createRenderer();
+    const json = {
+      objects: [
+        { type: 'rect', id: 'workspace', left: 0, top: 0, width: 360, height: 640, fill: '#fff' },
+        {
+          type: 'rect',
+          id: 'backgroundImage',
+          left: 0,
+          top: 0,
+          width: 360,
+          height: 640,
+          backgroundImageMode: 'tile',
+          isVariableBackground: true,
+          src: '{{bg}}',
+          fill: { type: 'pattern', source: '{{bg}}', repeat: 'repeat' },
+        },
+      ],
+    };
+    await core.loadJSON(renderObjects(json, { bg: 'https://x/bg.webp' }));
+    autoGrowPlugin(core).apply();
+    await wsPlugin(core).whenImagesLoaded();
+    wsPlugin(core).relayoutBackground();
+    const bg = wsPlugin(core).getBackgroundImageObj();
+    expect(bg).toBeTruthy();
+    expect(bg.type).toBe('rect');
+    expect(bg.fill).toBeTruthy();
+    expect(bg.fill.source.src).toContain('x/bg.webp');
+    expect(bg.get('width')).toBe(360);
+    mock.mockRestore();
+  });
+
+  it('编辑器导出 JSON（宽高为占位图尺寸）→ 重排后 width/height 重置为真实尺寸（修复"左上角一小块"）', async () => {
+    const mock = mockLoadImageByUrl({ bg: { w: 720, h: 1280 } });
+    const { core } = createRenderer();
+    // 模拟编辑器 setBackgroundVariableImage 导出的 JSON：width/height 是占位图 240x160，scale 按占位图 cover 算
+    const json = {
+      objects: [
+        { type: 'rect', id: 'workspace', left: 0, top: 0, width: 360, height: 640, fill: '#fff' },
+        {
+          type: 'image',
+          id: 'backgroundImage',
+          left: -90,
+          top: -200,
+          width: 240,
+          height: 160,
+          scaleX: 1.5,
+          scaleY: 1.5,
+          backgroundImageMode: 'cover',
+          isVariableBackground: true,
+          src: '{{bg}}',
+        },
+      ],
+    };
+    await core.loadJSON(renderObjects(json, { bg: 'https://x/bg.webp' }));
+    wsPlugin(core).relayoutBackground();
+    const bg = wsPlugin(core).getBackgroundImageObj();
+    // width/height 重置为真实自然尺寸，否则显示尺寸 = JSON宽(240) × scale
+    expect(bg.get('width')).toBeCloseTo(720, 4);
+    expect(bg.get('height')).toBeCloseTo(1280, 4);
+    // cover：rectRatio(0.5625) === imgRatio(0.5625) → scale = rectH/imgH = 0.5
+    expect(bg.get('scaleX')).toBeCloseTo(0.5, 4);
+    expect(bg.get('scaleY')).toBeCloseTo(0.5, 4);
+    // 显示尺寸 = 720 × 0.5 = 360（铺满），非 240 × 0.5 = 120
+    expect(bg.get('width') * bg.get('scaleX')).toBeCloseTo(360, 4);
+    mock.mockRestore();
+  });
+
+  it('pattern source 非 DOM 元素（字符串）时 whenImagesLoaded 不抛错（防御）', async () => {
+    const mock = mockLoadImageByUrl({ bg: { w: 100, h: 100 } });
+    const { core } = createRenderer();
+    const json = {
+      objects: [
+        { type: 'rect', id: 'workspace', left: 0, top: 0, width: 300, height: 400, fill: '#fff' },
+        {
+          type: 'rect',
+          id: 'backgroundImage',
+          left: 0,
+          top: 0,
+          width: 300,
+          height: 400,
+          backgroundImageMode: 'tile',
+          src: 'https://x/bg.webp',
+          fill: { type: 'pattern', source: 'https://x/bg.webp', repeat: 'repeat' },
+        },
+      ],
+    };
+    await core.loadJSON(json);
+    // 强行把 pattern source 置为字符串（模拟未 enliven 的异常态），不应抛错
+    const bg = wsPlugin(core).getBackgroundImageObj();
+    bg.fill.source = 'https://x/bg.webp';
+    await expect(wsPlugin(core).whenImagesLoaded()).resolves.toBeUndefined();
+    mock.mockRestore();
+  });
+
+  it('renderer-demo 示例 JSON 全流程：fill bg URL → 背景铺满 workspace（复现面板→渲染器）', async () => {
+    const mock = mockLoadImageByUrl({ bg: { w: 720, h: 1280 } });
+    const { core } = createRenderer();
+    const json = {
+      objects: [
+        { type: 'rect', id: 'workspace', left: 0, top: 0, width: 360, height: 640, fill: '#fff' },
+        {
+          type: 'image',
+          id: 'backgroundImage',
+          left: 0,
+          top: 0,
+          width: 360,
+          height: 640,
+          src: '{{bg}}',
+          crossOrigin: 'anonymous',
+          isVariableBackground: true,
+          backgroundImageMode: 'cover',
+          backgroundPosition: { x: 0.5, y: 0.5 },
+          selectable: false,
+          evented: false,
+        },
+      ],
+    };
+    const substituted = renderObjects(json, { bg: 'https://x/bg.webp' });
+    expect(substituted.objects[1].src).toBe('https://x/bg.webp');
+    await core.loadJSON(substituted);
+    wsPlugin(core).relayoutBackground();
+    const bg = wsPlugin(core).getBackgroundImageObj();
+    expect(bg).toBeTruthy();
+    // 同比例 cover：scale=0.5，显示尺寸 = 720×0.5 = 360 铺满
+    expect(bg.get('width')).toBeCloseTo(720, 4);
+    expect(bg.get('scaleX')).toBeCloseTo(0.5, 4);
+    expect(bg.get('width') * bg.get('scaleX')).toBeCloseTo(360, 4);
+    expect(bg.get('height') * bg.get('scaleY')).toBeCloseTo(640, 4);
+    mock.mockRestore();
+  });
+});
