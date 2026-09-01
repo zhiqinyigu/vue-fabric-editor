@@ -333,6 +333,8 @@ class ServersPlugin {
             // 加载恢复后回退为 fabric 默认 true，系统层会重新响应鼠标（表现为可被选中编辑）
             'evented',
             'editable',
+            // 路径文字尺寸语义开关（true=5.3 语义默认省略，false=5.5 原生，见 objects/CustomIText.js）
+            'legacyPathDims',
             'extensionType',
             'extension',
             'verticalAlign',

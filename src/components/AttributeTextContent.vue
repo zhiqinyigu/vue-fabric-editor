@@ -10,6 +10,7 @@ import {
 import useSelect from '@/hooks/select';
 import InputNumber from '@/components/inputNumber';
 import PathEditorDialog from './PathEditorDialog.vue';
+import { refreshPathTextDims } from '@/core/objects/CustomIText';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import AttrField from '@/components/attrPanel/AttrField.vue';
 import AttrMultiField from '@/components/attrPanel/AttrMultiField.vue';
@@ -35,6 +36,7 @@ export default {
       stroke: '',
       showPathAttr: false,
       d: '',
+      legacyPathDims: true,
     });
     // 当前文本是否含模板变量占位符，用于高亮提示
     const hasVariable = computed(() =>
@@ -52,6 +54,7 @@ export default {
           baseAttr.stroke = path.stroke;
           baseAttr.showPathAttr = true;
           baseAttr.d = fabric.util.joinPath(path.path);
+          baseAttr.legacyPathDims = activeObject.legacyPathDims !== false;
         } else {
           baseAttr.showPathAttr = false;
         }
@@ -100,10 +103,31 @@ export default {
           );
           path._setPath(shifted);
         }
-        // 文本位置与路径坐标对齐（保持原位），文本从路径起点开始
+        // 文本位置与路径坐标对齐（保持原位），文本从路径起点开始：
+        // 把路径包围盒左上角锚定到 (path.left, path.top)。
+        // legacy 语义下对象 top-left 即路径左上角；5.5 语义下对象含 1.1 倍行高增量，
+        // 需按对象中心换算（origin left/top 时 left = path.left - 增量/2）
         activeObject.setPathInfo(); // 重算 segmentsInfo，文本沿路径排布
-        activeObject.set({ left: path.left, top: path.top });
         activeObject.initDimensions();
+        if (activeObject.legacyPathDims === false) {
+          const cx = path.left + path.width / 2;
+          const cy = path.top + path.height / 2;
+          const left =
+            activeObject.originX === 'center'
+              ? cx
+              : activeObject.originX === 'right'
+              ? cx + activeObject.width / 2
+              : cx - activeObject.width / 2;
+          const top =
+            activeObject.originY === 'center'
+              ? cy
+              : activeObject.originY === 'bottom'
+              ? cy + activeObject.height / 2
+              : cy - activeObject.height / 2;
+          activeObject.set({ left, top });
+        } else {
+          activeObject.set({ left: path.left, top: path.top });
+        }
         activeObject.setCoords();
         canvasEditor.canvas.renderAll();
         baseAttr.d = fabric.util.joinPath(path.path);
@@ -127,6 +151,18 @@ export default {
       showPathEditor.value = false;
     };
 
+    // 路径文字尺寸语义开关：true=兼容旧版（5.3），false=新版（5.5 原生）。
+    // 切换时重算尺寸并保持路径渲染位置（对象中心）不变
+    const changeLegacyPathDims = (value) => {
+      const activeObject = canvasEditor.canvas.getActiveObjects()[0];
+      if (!activeObject || !activeObject.path) return;
+      const legacy = !!value;
+      if ((activeObject.legacyPathDims !== false) === legacy) return;
+      activeObject.legacyPathDims = legacy;
+      refreshPathTextDims(activeObject);
+      canvasEditor.canvas.renderAll();
+    };
+
     onMounted(() => {
       canvasEditor.on('selectCancel', selectCancel);
       canvasEditor.on('selectOne', getObjectAttr);
@@ -148,6 +184,7 @@ export default {
       showPathEditor,
       openPathEditor,
       onApplyFromEditor,
+      changeLegacyPathDims,
     };
   },
 };
@@ -194,6 +231,21 @@ export default {
         <template #right>
           <Button size="small" type="primary" @click="openPathEditor">编辑</Button>
         </template>
+      </AttrField>
+
+      <!-- 尺寸语义开关：默认兼容旧版模板；粘贴自其他新版编辑器的路径文字偏移时可关闭 -->
+      <AttrField split bare style="margin-top: 8px">
+        <template #label>
+          <span>{{ $t('textPath.legacyDims') }}</span>
+          <Tooltip placement="top" :content="$t('textPath.legacyDimsTip')">
+            <Icon type="ios-help-circle-outline" size="18" />
+          </Tooltip>
+        </template>
+        <iSwitch
+          v-model="baseAttr.legacyPathDims"
+          size="small"
+          @on-change="changeLegacyPathDims"
+        ></iSwitch>
       </AttrField>
     </template>
 

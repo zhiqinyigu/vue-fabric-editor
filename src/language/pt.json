@@ -66,6 +66,10 @@
   "color": "Cor",
   "textFloat": "Decimal",
   "text_content": "Conteúdo do texto",
+  "textPath": {
+    "legacyDims": "Modo de tamanho antigo",
+    "legacyDimsTip": "Ativado: a caixa delimitadora do texto no caminho é calculada da forma antiga, consistente com os modelos antigos.\nDesativado: usa o novo cálculo. Se um texto no caminho colado de outro editor novo aparecer deslocado, desative esta opção para alinhá-lo.\nEm caso de dúvida, mantenha ativado"
+  },
   "elements": "Adicionar",
   "background": "Fundo",
   "common_elements": "Elementos comuns",

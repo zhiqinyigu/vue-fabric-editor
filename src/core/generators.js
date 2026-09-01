@@ -24,9 +24,13 @@ export function qrParamsToOption(option) {
       errorCorrectionLevel: option.errorCorrectionLevel,
     },
     // 点
+    // roundSize: false 禁用码点像素取整。qr-code-styling >=1.7 默认 true，
+    // 会把码点尺寸向下取整导致码点区域缩水并产生额外留白（580px 约缩 7%）；
+    // 旧版 1.6.0-rc.1 无此选项，传了也会被忽略，无副作用
     dotsOptions: {
       color: option.dotsColor,
       type: option.dotsType,
+      roundSize: false,
     },
     // 三个角
     cornersSquareOptions: {

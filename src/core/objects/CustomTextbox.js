@@ -7,6 +7,31 @@ import { fabric } from 'fabric';
 
 var controlsUtils = fabric.controlsUtils;
 
+// fabric.util.hasStyleChanged 兜底：lib 构建将 fabric 外置（vue.config.js externals），
+// 消费方运行时的 fabric 可能低于 5.0（该 util 5.0 才移入 fabric.util，低版本为 Text 内部方法）。
+// justify 对齐 / charSpacing / 富文本样式会走 _renderChars 逐字分支并调用它，
+// 缺失时抛 TypeError（hasStyleChanged is not a function）。实现与 fabric 5.3.0 一致。
+var hasStyleChangedUtil =
+    fabric.util.hasStyleChanged ||
+    function (prevStyle, thisStyle, forTextSpans) {
+    forTextSpans = forTextSpans || false;
+    return (
+        prevStyle.fill !== thisStyle.fill ||
+        prevStyle.stroke !== thisStyle.stroke ||
+        prevStyle.strokeWidth !== thisStyle.strokeWidth ||
+        prevStyle.fontSize !== thisStyle.fontSize ||
+        prevStyle.fontFamily !== thisStyle.fontFamily ||
+        prevStyle.fontWeight !== thisStyle.fontWeight ||
+        prevStyle.fontStyle !== thisStyle.fontStyle ||
+        prevStyle.textBackgroundColor !== thisStyle.textBackgroundColor ||
+        prevStyle.deltaY !== thisStyle.deltaY ||
+        (forTextSpans &&
+        (prevStyle.overline !== thisStyle.overline ||
+            prevStyle.underline !== thisStyle.underline ||
+            prevStyle.linethrough !== thisStyle.linethrough))
+    );
+};
+
 // 宽度手柄（ml/mr）：直接改 obj.width；顶部恒固定（自动高度变化不产生 Y 漂移），旋转感知
 function changeTextWidth(eventData, transform, x, y) {
     var target = transform.target;
@@ -255,7 +280,7 @@ fabric.Textbox = fabric.util.createClass(fabric.Textbox, {
             if (!timeToRender) {
                 actualStyle = actualStyle || this.getCompleteStyleDeclaration(lineIndex, i);
                 nextStyle = this.getCompleteStyleDeclaration(lineIndex, i + 1);
-                timeToRender = fabric.util.hasStyleChanged(actualStyle, nextStyle, false);
+                timeToRender = hasStyleChangedUtil(actualStyle, nextStyle, false);
             }
             if (path) {
                 ctx.save();

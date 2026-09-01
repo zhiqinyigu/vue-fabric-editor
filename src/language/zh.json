@@ -66,6 +66,10 @@
   "color": "颜色",
   "textFloat": "小数",
   "text_content": "文本内容",
+  "textPath": {
+    "legacyDims": "兼容旧版尺寸",
+    "legacyDimsTip": "开启：按旧版方式计算文字路径的包围盒，与旧模板位置一致。\n关闭：按新版方式计算。粘贴自其他新版编辑器的路径文字若位置偏移，关闭即可对齐。\n如果不明白，请保持开启"
+  },
   "elements": "添加",
   "background": "背景",
   "common_elements": "基础要素",

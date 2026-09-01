@@ -1,5 +1,6 @@
-﻿import { fabric } from 'fabric';
+import { fabric } from 'fabric';
 import PathTextPlugin from '../../src/core/plugin/PathTextPlugin';
+import { refreshPathTextDims } from '../../src/core/objects/CustomIText';
 
 function makeCanvas() {
   const handlers = {};
@@ -209,6 +210,47 @@ describe('PathTextPlugin 路径文字', () => {
     const c = firstCharAbs(tb);
     const dist = Math.hypot(c.x - mAbs.x, c.y - mAbs.y);
     expect(dist).toBeLessThan(15);
+  });
+
+  it('legacyPathDims 语义：默认/true 回退 5.3 尺寸，false 用 5.5 原生尺寸', () => {
+    const path = new fabric.Path(
+      [
+        ['M', 0, 0],
+        ['L', 100, 0],
+      ],
+      { fill: null, stroke: '#000', strokeWidth: 2 }
+    );
+    const tbLegacy = new fabric.IText('hello', { fontSize: 20, top: 0, left: 0, path });
+    expect(tbLegacy.width).toBe(path.width);
+    expect(tbLegacy.height).toBe(path.height);
+    tbLegacy.legacyPathDims = false;
+    tbLegacy.initDimensions();
+    const additional = tbLegacy.getHeightOfLine(0) * 1.1; // fabric 5.5.0 #10355 近似增量
+    expect(tbLegacy.width).toBeCloseTo(path.width + additional, 6);
+    expect(tbLegacy.height).toBeCloseTo(path.height + additional, 6);
+  });
+
+  it('refreshPathTextDims：切换语义时保持对象中心（路径渲染位置）不变', () => {
+    const path = new fabric.Path(
+      [
+        ['M', 0, 0],
+        ['L', 100, 0],
+      ],
+      { fill: null, stroke: '#000', strokeWidth: 2 }
+    );
+    const tb = new fabric.IText('hello', { fontSize: 20, top: 300, left: 400, path });
+    const centerBefore = tb.calcTransformMatrix();
+    tb.legacyPathDims = false;
+    refreshPathTextDims(tb);
+    let centerAfter = tb.calcTransformMatrix();
+    expect(centerAfter[4]).toBeCloseTo(centerBefore[4], 6);
+    expect(centerAfter[5]).toBeCloseTo(centerBefore[5], 6);
+    // 切回 legacy 语义，中心同样不变
+    tb.legacyPathDims = true;
+    refreshPathTextDims(tb);
+    centerAfter = tb.calcTransformMatrix();
+    expect(centerAfter[4]).toBeCloseTo(centerBefore[4], 6);
+    expect(centerAfter[5]).toBeCloseTo(centerBefore[5], 6);
   });
 });
 

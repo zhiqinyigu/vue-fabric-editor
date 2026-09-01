@@ -66,6 +66,10 @@
   "color": "Color",
   "textFloat": "Decimal",
   "text_content": "Text Content",
+  "textPath": {
+    "legacyDims": "Legacy size mode",
+    "legacyDimsTip": "On: the path text bounding box is calculated the legacy way, consistent with old templates.\nOff: use the new calculation. If a path text pasted from another new-version editor looks shifted, turn this off to align it.\nIf unsure, keep this on"
+  },
   "elements": "Add",
   "background": "Background",
   "common_elements": "Common Elements",
