@@ -76,6 +76,7 @@ export {
 } from './workspaceGeometry';
 import EventType from './eventType';
 import Utils from './utils/utils';
+import './objects/stylesCompat';
 import CustomRect from './objects/CustomRect';
 import CustomTextbox from './objects/CustomTextbox';
 // import { extend } from 'dayjs';

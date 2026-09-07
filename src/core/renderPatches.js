@@ -7,6 +7,7 @@
  * 一次性引入所有 fromObject / 原型补丁，保证两边加载出的对象渲染行为完全一致。
  */
 import './objects/CustomRect';
+import './objects/stylesCompat';
 import './objects/CustomTextbox';
 import './objects/CustomIText';
 import './objects/Arrow';

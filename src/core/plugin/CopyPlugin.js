@@ -8,13 +8,25 @@
 import { fabric } from 'fabric';
 import { v4 as uuid } from 'uuid';
 import { getImgStr } from '../utils/utils';
+// 画布内元素复制专用 MIME：copy 事件随 text/plain 一并写入对象快照，
+// 外部应用会忽略该类型（剪贴板可见内容为纯文字），粘贴事件可读回用于还原对象
+export const VFE_COPY_MIME = 'application/x-vfe-copy';
 class CopyPlugin {
     constructor(canvas, editor) {
         this.canvas = canvas;
         this.editor = editor;
         this.hotkeys = ['ctrl+v', 'ctrl+c'];
         this.cache = null;
+        // 复制哨兵：copy 时记录写入 text/plain 的纯文字，paste 时比对识别画布内复制
+        this.lastCopyText = null;
+        // 页面内输入框/编辑态发生的复制（原生文本复制），使哨兵失效避免误判
+        this._externalCopy = false;
+        // 本次 ctrl+v 粘贴是否已由 pasteListener 处理（防止 setTimeout 兜底二次克隆）
+        this._pasteHandled = false;
+        this._onPaste = (e) => this.pasteListener(e);
+        this._onCopy = (e) => this.copyListener(e);
         this.initPaste();
+        this.initCopy();
     }
     // 多选对象复制
     _copyActiveSelection(activeObject) {
@@ -85,17 +97,18 @@ class CopyPlugin {
     // 快捷键扩展回调
     hotkeyEvent(eventName, e) {
         if (eventName === 'ctrl+c' && e.type === 'keydown') {
-            const activeObject = this.canvas.getActiveObject();
-            this.cache = activeObject;
-            // 清空剪切板
-            navigator.clipboard.writeText('');
+            // cache 兜底：部分浏览器（如 Safari 无选区）不派发 copy 事件时仍可克隆
+            // 剪贴板内容由 copyListener 写入（纯文字 + 对象快照）
+            this.cache = this.canvas.getActiveObject();
         }
         if (eventName === 'ctrl+v' && e.type === 'keydown') {
+            this._pasteHandled = false;
             // 确保clone元素操作的执行晚于pasteListener
             setTimeout(() => {
-                if (this.cache) {
+                if (!this._pasteHandled && this.cache) {
                     this.clone(this.cache);
                 }
+                this._pasteHandled = false;
             }, 0);
         }
     }
@@ -106,11 +119,51 @@ class CopyPlugin {
         }
     }
     destroy() {
-        console.log('pluginDestroy');
-        window.removeEventListener('paste', (e) => this.pasteListener(e));
+        window.removeEventListener('paste', this._onPaste);
+        document.removeEventListener('copy', this._onCopy);
     }
     initPaste() {
-        window.addEventListener('paste', (e) => this.pasteListener(e));
+        window.addEventListener('paste', this._onPaste);
+    }
+    initCopy() {
+        // ctrl+c 时浏览器派发原生 copy 事件（Chrome/Edge/Firefox 无选区也会派发），
+        // 在此写入剪贴板：text/plain 为元素纯文字（外部应用可见），自定义 MIME 为对象快照
+        document.addEventListener('copy', this._onCopy);
+    }
+    // 提取复制到剪贴板的可见纯文字：文本元素取内容，多选取子元素文字拼接，其它类型为空
+    _getCopyPureText(activeObject) {
+        if (activeObject.type === 'activeSelection') {
+        return (activeObject.getObjects ? activeObject.getObjects() : activeObject._objects || [])
+            .map((obj) => (obj && typeof obj.text === 'string' ? obj.text : ''))
+            .filter(Boolean)
+            .join('\n');
+        }
+        return typeof activeObject.text === 'string' ? activeObject.text : '';
+    }
+    copyListener(e) {
+        const activeEl = document.activeElement;
+        if (activeEl !== document.body) {
+            // 编辑态/输入框内的复制：不干预，保留原生文本复制，并使哨兵失效避免误判
+            if (
+                activeEl &&
+                (activeEl.tagName === 'INPUT' ||
+                activeEl.tagName === 'TEXTAREA' ||
+                activeEl.isContentEditable)
+            ) {
+                this._externalCopy = true;
+            }
+            return;
+        }
+        const activeObject = this.canvas.getActiveObject();
+        if (!activeObject) return;
+        const keys = this.editor.getExtensionKey();
+        const pureText = this._getCopyPureText(activeObject);
+        e.clipboardData.setData('text/plain', pureText);
+        e.clipboardData.setData(VFE_COPY_MIME, JSON.stringify(activeObject.toObject(keys)));
+        e.preventDefault();
+        this.cache = activeObject;
+        this.lastCopyText = pureText;
+        this._externalCopy = false;
     }
     async pasteListener(event) {
         const canvas = this.canvas;
@@ -120,7 +173,31 @@ class CopyPlugin {
         else {
             return;
         }
-        const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+        const clipboardData = event.clipboardData || event.originalEvent.clipboardData;
+        // 1) 自定义 MIME（Chrome/Edge/Firefox）：按复制时快照还原对象克隆
+        const payloadText = clipboardData.getData(VFE_COPY_MIME);
+        if (payloadText) {
+        this.cache = null; // 交由下方克隆，避免 setTimeout 二次克隆
+        this._pasteHandled = true;
+        try {
+            const payload = JSON.parse(payloadText);
+            fabric.util.enlivenObjects([payload], (objs) => {
+                objs[0] && this.clone(objs[0]);
+            });
+        } catch (err) {
+            /* payload 损坏，忽略 */
+        }
+            return;
+        }
+        // 2) 哨兵比对（Safari 等丢弃自定义 MIME 的浏览器）：text/plain 与复制时写入的
+        //    纯文字完全一致才认定画布内复制；直接克隆并保留 cache 支持连续粘贴
+        const rawText = clipboardData.getData('text/plain');
+        if (!this._externalCopy && this.cache && rawText === this.lastCopyText) {
+            this._pasteHandled = true;
+            this.clone(this.cache);
+            return;
+        }
+        const items = clipboardData.items;
         const fileAccept = '.pdf,.psd,.cdr,.ai,.svg,.jpg,.jpeg,.png,.webp,.json';
         for (const item of items) {
             if (item.kind === 'file') {
@@ -180,10 +257,8 @@ class CopyPlugin {
                         (activeObject.type === 'textbox' || activeObject.type === 'i-text') &&
                         activeObject.text) {
                         const cursorPosition = activeObject.selectionStart;
-                        const textBeforeCursorPosition = activeObject.text.substring(0, cursorPosition);
-                        const textAfterCursorPosition = activeObject.text.substring(cursorPosition);
-                        // 更新文本对象的文本
-                        activeObject.set('text', textBeforeCursorPosition + text + textAfterCursorPosition);
+                        // 用 fabric 的 insertChars 插入：内部同步样式复制、清理越界样式并重算尺寸
+                        activeObject.insertChars(text, null, cursorPosition, cursorPosition);
                         // 重新设置光标的位置
                         activeObject.selectionStart = cursorPosition + text.length;
                         activeObject.selectionEnd = cursorPosition + text.length;
