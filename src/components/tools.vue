@@ -15,7 +15,7 @@
         <span>{{ $t('insertFile.insert_SVGStr_label') }}</span>
       </span>
     </div>
-    <Divider plain orientation="left">{{ $t('common_elements') }}</Divider>
+    <Divider plain orientation="left">{{ $t('text_elements') }}</Divider>
     <div class="tool-box">
       <span :draggable="true" @click="() => addText()" @dragend="addText">
         <TextIcon width="26" height="26"></TextIcon>
@@ -25,6 +25,16 @@
         <TextBoxIcon width="26" height="26"></TextBoxIcon>
         <span>{{ $t('textTool.textBox') }}</span>
       </span>
+      <span
+        :class="state.isDrawingLineMode && state.lineType === 'pathText' && 'bg'"
+        @click="pathTextDraw"
+      >
+        <TextPathIcon width="26" height="26"></TextPathIcon>
+        <span>{{ $t('textTool.pathText') }}</span>
+      </span>
+    </div>
+    <Divider plain orientation="left">{{ $t('common_elements') }}</Divider>
+    <div class="tool-box">
       <span :draggable="true" @click="() => addRect()" @dragend="addRect">
         <RectIcon width="26" height="26"></RectIcon>
       </span>
@@ -123,6 +133,7 @@ import { Message } from 'view-design';
 import { getPolygonVertices } from '@/utils/math';
 import { Utils } from '@/core/index';
 import useSelect from '@/hooks/select';
+import { isFixedLayerObject } from '@/core/utils/utils';
 import CircleIcon from '@/assets/icon/tools/circle.svg';
 import Draw1Icon from '@/assets/icon/tools/draw1.svg';
 import Draw2Icon from '@/assets/icon/tools/draw2.svg';
@@ -133,6 +144,7 @@ import PolygonIcon from '@/assets/icon/tools/polygon.svg';
 import RectIcon from '@/assets/icon/tools/rect.svg';
 import TextIcon from '@/assets/icon/tools/text.svg';
 import TextBoxIcon from '@/assets/icon/tools/textBox.svg';
+import TextPathIcon from '@/assets/icon/tools/textPath.svg';
 import TriangleIcon from '@/assets/icon/tools/triangle.svg';
 
 import QrCodeIcon from '@/assets/icon/tools/qrCode.svg';
@@ -276,6 +288,7 @@ export default {
     RectIcon,
     TextIcon,
     TextBoxIcon,
+    TextPathIcon,
     TriangleIcon,
     QrCodeIcon,
     BarCodeIcon,
@@ -420,6 +433,36 @@ export default {
       }
     };
 
+    // 路径文字：自由绘制一条路径（自动平滑），松手即生成挂在路径上的文本
+    const pathTextDraw = () => {
+      if (state.lineType === LINE_TYPE.pathText) {
+        canvasEditor.endTextPathDraw();
+        state.lineType = false;
+        state.isDrawingLineMode = false;
+        ensureObjectSelEvStatus(!state.isDrawingLineMode, !state.isDrawingLineMode);
+      } else {
+        endConflictTools();
+        endDrawingLineMode();
+        state.lineType = LINE_TYPE.pathText;
+        state.isDrawingLineMode = true;
+        ensureObjectSelEvStatus(!state.isDrawingLineMode, !state.isDrawingLineMode);
+        canvasEditor.startTextPathDraw({
+          defaultText: props.defaultText,
+          defaultFontSize: 20,
+          color: '#000000',
+          lineColor: '#000000',
+          width: 2,
+          onCreated: (textObject) => {
+            state.lineType = false;
+            state.isDrawingLineMode = false;
+            ensureObjectSelEvStatus(!state.isDrawingLineMode, !state.isDrawingLineMode);
+            canvasEditor.canvas.setActiveObject(textObject);
+            canvasEditor.canvas.renderAll();
+          },
+        });
+      }
+    };
+
     const endConflictTools = () => {
       canvasEditor.discardPolygon();
       canvasEditor.endDraw();
@@ -449,10 +492,12 @@ export default {
 
     const ensureObjectSelEvStatus = (evented, selectable) => {
       canvasEditor.canvas.forEachObject((obj) => {
-        if (obj.id !== 'workspace') {
-          obj.selectable = selectable;
-          obj.evented = evented;
+        // 系统层交互态固定：跳过，否则退出绘制模式时背景图会被解锁成普通图片可选中
+        if (isFixedLayerObject(obj)) {
+          return;
         }
+        obj.selectable = selectable;
+        obj.evented = evented;
       });
     };
 
@@ -483,6 +528,7 @@ export default {
       addRect,
       drawPolygon,
       freeDraw,
+      pathTextDraw,
       drawingLineModeSwitch,
     };
   },

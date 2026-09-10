@@ -64,9 +64,11 @@
   "elements": "Add",
   "background": "Background",
   "common_elements": "Common Elements",
+  "text_elements": "Text",
   "textTool": {
     "text": "Text",
     "textBox": "Text Box",
+    "pathText": "Path Text"
   },
   "draw_elements": "Draw Elements",
   "code_img": "Code Img",

@@ -21,6 +21,10 @@ class WorkspacePlugin {
             height: 1200,
         });
         this.zoomRatio = 0.85;
+        // 历史恢复（undo/redo 走 loadFromJSON，不触发 hookImportAfter）后重捕获背景状态，
+        // 否则内部状态失同步：撤销掉背景图后 resize 会经 _syncBackgroundImage 复活已撤销的背景
+        this.canvas.on('history:undo', () => this._onHistoryRestore());
+        this.canvas.on('history:redo', () => this._onHistoryRestore());
     }
     init(option) {
         const workspaceEl = document.querySelector('#workspace');
@@ -320,6 +324,12 @@ class WorkspacePlugin {
         if (this.backgroundImageDataUrl) {
             this.setBackgroundImage(this.backgroundImageDataUrl, this.backgroundImageMode);
         }
+    }
+    // 历史快照恢复后同步背景图状态（history:undo / history:redo 回调）
+    _onHistoryRestore() {
+        this._captureBackgroundImage();
+        // 变量背景（tile 形态）快照中 fill.source 是变量 URL，需用占位图重建 Pattern
+        this._restoreVariableBackgroundAfterImport();
     }
     // 从画布捕获背景图数据（loadJSON 后调用）
     _captureBackgroundImage() {

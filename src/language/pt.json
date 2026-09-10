@@ -64,9 +64,11 @@
   "elements": "Adicionar",
   "background": "Fundo",
   "common_elements": "Elementos comuns",
+  "text_elements": "Texto",
   "textTool": {
     "text": "Texto",
     "textBox": "Caixa de texto",
+    "pathText": "Texto de caminho"
   },
   "draw_elements": "Elementos arrastre",
   "code_img": "Imagem de código",

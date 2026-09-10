@@ -134,6 +134,19 @@ export const isIText = (thing) => {
 export const isActiveSelection = (thing) => {
     return thing instanceof fabric.ActiveSelection;
 };
+/**
+ * 系统层/固定层对象：交互态固定（不可选中编辑），绘制模式批量解锁时必须跳过，
+ * 否则背景图等会被解锁成普通图片可被选中（workspace / 背景图 / 蒙版覆盖层 / 标尺辅助线）
+ */
+export const isFixedLayerObject = (obj) => {
+    if (!obj) return false;
+    return (
+        obj.id === 'workspace' ||
+        obj.id === 'backgroundImage' ||
+        obj.id === 'coverMask' ||
+        (!!fabric.GuideLine && obj instanceof fabric.GuideLine)
+    );
+};
 export function blobToBase64(blob) {
     return new Promise((resolve) => {
         const reader = new FileReader();
@@ -168,6 +181,7 @@ export default {
     isGroup,
     isIText,
     isActiveSelection,
+    isFixedLayerObject,
     blobToBase64,
     base64ToBlob,
 };

@@ -64,9 +64,11 @@
   "elements": "添加",
   "background": "背景",
   "common_elements": "基础要素",
+  "text_elements": "文字",
   "textTool": {
     "text": "文本",
     "textBox": "文本框",
+    "pathText": "路径文本"
   },
   "draw_elements": "绘制元素",
   "code_img": "条码图片",

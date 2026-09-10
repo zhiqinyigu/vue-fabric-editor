@@ -93,6 +93,9 @@ class HistoryPlugin {
         this.canvas.loadFromJSON(state, () => {
             this.canvas.renderAll();
             this.canvas.fire(eventName);
+            // 通知 UI/插件快照已恢复（loadJson 仅模板加载路径触发，undo/redo 需独立通知）；
+            // WorkspacePlugin 监听画布 history:undo/redo 事件先重捕获背景状态，此处再通知组件回显
+            this.editor.emit('historyRestore');
             this.isProcessing = false;
             this.isLoading = false;
             callback === null || callback === void 0 ? void 0 : callback();

@@ -36,6 +36,7 @@
     "number-precision": "^1.6.0",
     "qr-code-styling": "1.6.0-rc.1",
     "qs": "^6.12.1",
+    "svg-path-editor-lib": "^1.0.4",
     "tapable": "^2.2.1",
     "uuid": "^8.3.2",
     "view-design": "^4.7.0",

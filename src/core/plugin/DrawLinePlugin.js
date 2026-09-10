@@ -7,6 +7,7 @@
  */
 import { v4 as uuid } from 'uuid';
 import { fabric } from 'fabric';
+import { isFixedLayerObject } from '../utils/utils';
 import Arrow from '../objects/Arrow';
 import ThinTailArrow from '../objects/ThinTailArrow';
 class DrawLinePlugin {
@@ -121,10 +122,12 @@ class DrawLinePlugin {
     }
     endRest() {
         this.canvas.getObjects().forEach((obj) => {
-            if (obj.id !== 'workspace') {
-                obj.selectable = true;
-                obj.hasControls = true;
+            // 系统层交互态固定：跳过，否则退出画线模式时背景图会被解锁成普通图片可选中
+            if (isFixedLayerObject(obj)) {
+                return;
             }
+            obj.selectable = true;
+            obj.hasControls = true;
         });
     }
     destroy() {

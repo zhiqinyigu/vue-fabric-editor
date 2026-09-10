@@ -318,11 +318,14 @@ export default {
     onMounted(() => {
       canvasEditor.on('loadJson', handleChangeColor);
       canvasEditor.on('clear', handleClear);
+      // 撤销/重做恢复快照后重新回显（背景图可能被撤销移除或恢复）
+      canvasEditor.on('historyRestore', handleChangeColor);
     });
 
     onUnmounted(() => {
       canvasEditor.off('loadJson', handleChangeColor);
       canvasEditor.off('clear', handleClear);
+      canvasEditor.off('historyRestore', handleChangeColor);
     });
 
     return {
