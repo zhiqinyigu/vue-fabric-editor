@@ -9,6 +9,7 @@
               :json="parsed"
               :data="data"
               :adapters="adapters"
+              :options="options"
               @rendered="onRendered"
               @error="onError"
             />
@@ -52,6 +53,8 @@ export default {
     // 变量示例数据（预览用）
     data: { type: Object, default: () => ({}) },
     adapters: { type: Object, default: () => ({}) },
+    // 渲染器 options 透传（如 templateMode：原样模式渲染未替换模板，变量图/变量背景显示占位）
+    options: { type: Object, default: () => ({}) },
     // 画框高度
     height: { type: Number, default: 220 },
     // 固定画框宽度（如 Modal 内）；不传则自适应测量父容器宽度
@@ -92,7 +95,10 @@ export default {
       return ws && ws.width ? `${ws.width}×${ws.height}` : '';
     });
 
-    // 值变化：重置 loading、强制重挂载渲染器、重测舞台（stage 随空态切换重挂载）
+    // 值变化：重置 loading、强制重挂载渲染器、重测舞台（stage 随空态切换重挂载）。
+    // 注意：不监听 data（sampleData）——FabricRenderer 内部已有 data deep watch 做平滑重渲染；
+    // 若在这里重挂载渲染器，旧实例 dispose 后 enliven 异步回调再 clear 画布会报
+    // "Cannot read properties of null (reading 'clearRect')"
     const rendering = ref(false);
     const renderKey = ref(0);
     const { stage, stageWidth, attach } = useStageWidth();
@@ -104,6 +110,17 @@ export default {
         attach();
       },
       { immediate: true }
+    );
+    // options 变化（如变量占位开关注入）也需重挂载：RendererCore 的注册能力只在
+    // 构造期读取（data deep watch 平滑重渲染不会重建 core）
+    watch(
+      () => props.options,
+      () => {
+        if (!props.json) return;
+        rendering.value = hasValue.value;
+        renderKey.value += 1;
+        attach();
+      }
     );
 
     const boxW = computed(() => (props.fixedWidth > 0 ? props.fixedWidth : stageWidth.value));

@@ -180,9 +180,10 @@ class ServersPlugin {
     vp && vp.exitPreview && vp.exitPreview();
     const keys = this.getExtensionKey();
     const json = this.canvas.toJSON(keys);
-    // 附加模板变量元数据（包裹符 + 变量声明），供前台用户端解析与渲染
+    // 附加模板变量元数据：完整导出携带全量变量表快照（schema 定义 + 测试数据），
+    // 精简导出仅携带 C 端渲染所需的 defaultValue 回退项，供前台用户端解析与渲染
     if (vp && vp.getVariableMeta) {
-      json.variableMeta = vp.getVariableMeta();
+      json.variableMeta = vp.getVariableMeta(complete === true);
     }
     // 移除分片缓存参数（与 loadJSON 的追加对称）：存储/导出态恢复干净 URL，
     // 完整导出与最小化导出统一处理，保证保存的 JSON 不携带请求态参数
@@ -202,10 +203,8 @@ class ServersPlugin {
     if (this._useAssetManifest()) {
       this._applyAssetManifest(json);
     }
-    // example 为编辑端测试值，仅在完整导出时保留；最小化导出排除（由导出管线控制）
-    if (Array.isArray(json.variableMeta && json.variableMeta.variables)) {
-      json.variableMeta.variables.forEach((v) => delete v.example);
-    }
+    // variableMeta 已按 complete 分流（精简态仅 { version, delimiter, schema:[{path,defaultValue}] }），
+    // 测试数据（schema[].example）只存在于完整导出，无需再剥离
     return json;
   }
   // 是否启用资源清单去重（可通过 editor.options.useAssetManifest 开启）

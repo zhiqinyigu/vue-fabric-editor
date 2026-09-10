@@ -24,7 +24,26 @@ export default {
   setup() {
     const editor = ref(null);
 
-    // 内置能力（可选）：字体 / 尺寸
+    // 内置能力（可选）：字体 / 尺寸 / 变量表
+    // 变量表（schema）由业务后台存储，编辑器通过 adapter 注入消费：
+    // 变量面板对齐视图 + 文本/图片"插入变量"下拉 + 自定义变量保存（list/save 全量契约）
+    const variableSchema = [
+      {
+        path: 'course.name',
+        label: '课程名称',
+        type: 'text',
+        example: 'Vue 进阶实战',
+        defaultValue: '默认课程',
+        description: '海报标题位置展示的课程名',
+      },
+      { path: 'lecturer.name', label: '讲师姓名', type: 'text', example: '张三' },
+      {
+        path: 'course.cover',
+        label: '课程封面',
+        type: 'image',
+        example: 'https://picsum.photos/seed/cover/240/160',
+      },
+    ];
     const adapters = {
       font: {
         list: () =>
@@ -39,6 +58,14 @@ export default {
             { id: 1, name: '海报', width: 400, height: 600, unit: 'px' },
             { id: 2, name: '横幅', width: 800, height: 200, unit: 'px' },
           ]),
+      },
+      variable: {
+        list: () => Promise.resolve(variableSchema),
+        // 全量保存（业务侧自 diff）；去掉 save 则编辑器降级为"导出变量表 JSON"
+        save: (defs) => {
+          console.log('[demo] save variable schema', defs);
+          return Promise.resolve();
+        },
       },
     };
 

@@ -9,8 +9,12 @@
 <template>
   <AttrSection v-if="isOne && isMatchType && isQrcode" title="二位码属性">
     <div>
-      <AttrField label="内容">
-        <Input v-model="baseAttr.data" @on-change="changeCommon" />
+      <AttrField label="内容" editable>
+        <Input ref="dataInput" v-model="baseAttr.data" @on-change="changeCommon">
+          <template v-if="varSchemaAvailable" #append>
+            <VariableInsertPopover filter-type="qrcode" @select="insertVariable" />
+          </template>
+        </Input>
       </AttrField>
 
       <AttrMultiField>
@@ -139,9 +143,12 @@ import {
   getCurrentInstance,
   onMounted,
   onBeforeUnmount,
+  nextTick,
 } from '@vue/composition-api';
 import useSelect from '@/hooks/select';
 import InputNumber from '@/components/inputNumber';
+import VariableInsertPopover from './VariableInsertPopover.vue';
+import { insertAtCursor, getInputElement, focusCaret } from '@/utils/cursorInsert';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import AttrField from '@/components/attrPanel/AttrField.vue';
 import AttrMultiField from '@/components/attrPanel/AttrMultiField.vue';
@@ -151,6 +158,7 @@ export default {
   name: 'AttrBute',
   components: {
     InputNumber,
+    VariableInsertPopover,
     AttrSection,
     AttrField,
     AttrMultiField,
@@ -159,6 +167,11 @@ export default {
   setup() {
     const update = getCurrentInstance();
     const { canvasEditor, isOne, isMatchType } = useSelect(['image']);
+    // 变量表可用性：append 槽位级守卫（无 schema 时不渲染插入变量入口）。
+    // adapter 在编辑器初始化即绑定，属静态事实，本地 ref 即可（避免频繁重挂载累积监听器）
+    const varSchemaAvailable = ref(
+      !!(canvasEditor.getSchemaAdapter && canvasEditor.getSchemaAdapter())
+    );
 
     // 文字元素
     const extensionType = ref('');
@@ -200,6 +213,20 @@ export default {
       canvasEditor.canvas.renderAll();
     };
 
+    // 插入变量占位符到内容光标处（从变量表选择，杜绝手打）；
+    // 包裹符动态取自 VariablePlugin，插入后走 changeCommon 同步画布
+    const dataInput = ref(null);
+    const insertVariable = (path) => {
+      const vp = canvasEditor.getPlugin && canvasEditor.getPlugin('VariablePlugin');
+      const d = vp && vp.getDelimiter ? vp.getDelimiter() : { start: '{{', end: '}}' };
+      const token = `${d.start}${path}${d.end}`;
+      const el = getInputElement(dataInput.value, 'input.ivu-input');
+      const { next, caret } = insertAtCursor(el, baseAttr.data, token);
+      baseAttr.data = next;
+      changeCommon();
+      nextTick(() => focusCaret(el, caret));
+    };
+
     const selectCancel = () => {
       extensionType.value = '';
       update && update.proxy && update.proxy.$forceUpdate();
@@ -230,6 +257,9 @@ export default {
       baseAttr,
       changeCommon,
       optionsList,
+      varSchemaAvailable,
+      dataInput,
+      insertVariable,
     };
   },
 };

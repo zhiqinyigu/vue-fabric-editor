@@ -1,7 +1,7 @@
 /**
  * ServersPlugin 导出管线双模式回归
- * - getJson() 默认最小化：缺省字段精简 + 剔除 variableMeta.variables[].example
- * - getJson(true) 完整：不精简、保留 example
+ * - getJson() 默认最小化：缺省字段精简 + variableMeta 精简态（C 端 defaultValue 回退项）
+ * - getJson(true) 完整：不精简 + variableMeta 全量快照（schema 定义 + 测试数据 + src 标记）
  * - saveJson()：完整导出 + 2 空格缩进
  * - clipboard()：最小化导出 + 紧凑 JSON
  * - 变量背景（tile）：最小化导出顶替 fill.source 为变量 URL；完整导出保留占位 base64（D8）
@@ -59,10 +59,28 @@ function addVariableTextbox(canvas, vp, text = '{{user.name}}') {
   return tb;
 }
 
+// 注入会话表（视为导入）：
+// - user.name：画布已用 + 有 defaultValue → 两种形态均携带
+// - user.age：画布已用 + 无 defaultValue → 精简态过滤
+// - banner.img：未使用 + 有 defaultValue → 精简态过滤（全量快照仍携带）
+function setupSchema(vp) {
+  vp.setVariableSchema([
+    { path: 'user.name', label: '用户名', type: 'text', defaultValue: '默认名' },
+    { path: 'user.age', label: '年龄', type: 'text' },
+    {
+      path: 'banner.img',
+      label: '横幅',
+      type: 'image',
+      defaultValue: 'https://cdn.example.com/b.png',
+    },
+  ]);
+}
+
 describe('ServersPlugin 导出管线双模式', () => {
-  it('getJson() 默认最小化：剔除缺省字段与 variableMeta.example', () => {
+  it('getJson() 默认最小化：缺省字段精简 + variableMeta 精简态（仅 defaultValue 回退项）', () => {
     const { canvas, plugin, vp } = createEditor();
     addVariableTextbox(canvas, vp);
+    setupSchema(vp);
     const json = plugin.getJson();
 
     // 缺省字段被剔除（textbox 的 scaleX/opacity 等于默认值）
@@ -71,18 +89,18 @@ describe('ServersPlugin 导出管线双模式', () => {
     expect('scaleX' in tb).toBe(false);
     expect('opacity' in tb).toBe(false);
 
-    // example 被剔除，path/name 保留
-    expect(json.variableMeta).toBeTruthy();
-    json.variableMeta.variables.forEach((v) => {
-      expect('example' in v).toBe(false);
-      expect(v.path).toBe('user.name');
-      expect(v.name).toBe('user.name');
-    });
+    // 精简态：仅「已使用 ∧ 非空 defaultValue」条目，无测试数据、无旧 variables
+    const meta = json.variableMeta;
+    expect(meta.version).toBe(1);
+    expect(meta.delimiter).toEqual({ start: '{{', end: '}}' });
+    expect(meta.schema).toEqual([{ path: 'user.name', defaultValue: '默认名' }]);
+    expect('variables' in meta).toBe(false);
   });
 
-  it('getJson(true) 完整：保留缺省字段与 example', () => {
+  it('getJson(true) 完整：全量快照（定义 + 测试数据 + src 标记）+ 缺省字段保留', () => {
     const { canvas, plugin, vp } = createEditor();
     addVariableTextbox(canvas, vp);
+    setupSchema(vp);
     const json = plugin.getJson(true);
 
     // 完整导出不剔除缺省字段
@@ -90,18 +108,51 @@ describe('ServersPlugin 导出管线双模式', () => {
     expect(tb.scaleX).toBe(1);
     expect(tb.opacity).toBe(1);
 
-    // example 保留
-    expect(json.variableMeta.variables[0].example).toBe('张三');
+    const meta = json.variableMeta;
+    expect(meta.version).toBe(1);
+    // 全量快照（B）：三个定义全部携带，与是否使用无关
+    expect(meta.schema).toHaveLength(3);
+    // example 承载测试数据（testData 已填值权威），src 按导入/自定义标记
+    expect(meta.schema.find((d) => d.path === 'user.name')).toEqual({
+      path: 'user.name',
+      label: '用户名',
+      type: 'text',
+      example: '张三',
+      defaultValue: '默认名',
+      description: '',
+      src: 'imported',
+    });
+    expect(meta.schema.find((d) => d.path === 'banner.img')).toMatchObject({
+      path: 'banner.img',
+      src: 'imported',
+    });
   });
 
-  it('clipboard() 走最小化路径：example 与缺省字段均剔除', async () => {
+  it('getJson(true) 未定义变量合成 def：label=path、类型按占位字段推断、example 取测试数据', () => {
     const { canvas, plugin, vp } = createEditor();
     addVariableTextbox(canvas, vp);
+    const json = plugin.getJson(true);
+    expect(json.variableMeta.schema).toEqual([
+      {
+        path: 'user.name',
+        label: 'user.name',
+        type: 'text',
+        example: '张三',
+        defaultValue: '',
+        description: '',
+        src: 'custom',
+      },
+    ]);
+  });
+
+  it('clipboard() 走最小化路径：与 getJson() 同构', async () => {
+    const { canvas, plugin, vp } = createEditor();
+    addVariableTextbox(canvas, vp);
+    setupSchema(vp);
     await plugin.clipboard();
 
-    // clipboard 内部调 getJson()，验证同 getJson() 结果
     const min = plugin.getJson();
-    expect('example' in min.variableMeta.variables[0]).toBe(false);
+    expect(min.variableMeta.schema).toEqual([{ path: 'user.name', defaultValue: '默认名' }]);
     const tbMin = min.objects.find((o) => o.type === 'textbox');
     expect('scaleX' in tbMin).toBe(false);
   });
@@ -109,6 +160,7 @@ describe('ServersPlugin 导出管线双模式', () => {
   it('saveJson() 走完整路径 + 2 空格缩进', async () => {
     const { canvas, plugin, vp } = createEditor();
     addVariableTextbox(canvas, vp);
+    setupSchema(vp);
 
     const stringifySpy = jest.spyOn(JSON, 'stringify');
     await plugin.saveJson();
@@ -118,22 +170,22 @@ describe('ServersPlugin 导出管线双模式', () => {
     expect(firstCall[2]).toBe(2);
 
     const dataUrl = firstCall[0];
-    expect(dataUrl.variableMeta.variables[0].example).toBe('张三');
+    expect(dataUrl.variableMeta.schema.find((d) => d.path === 'user.name').example).toBe('张三');
 
     stringifySpy.mockRestore();
   });
 
-  it('最小化导出经 normalizeCanvasDefaults 补回缺省字段', () => {
+  it('最小化导出经 normalizeCanvasDefaults 补回缺省字段，variableMeta 精简态原样保留', () => {
     const { canvas, plugin, vp } = createEditor();
     addVariableTextbox(canvas, vp);
+    setupSchema(vp);
     const min = plugin.getJson();
 
     const restored = normalizeCanvasDefaults(JSON.parse(JSON.stringify(min)));
     const tb = restored.objects.find((o) => o.type === 'textbox');
     expect(tb.scaleX).toBe(1);
     expect(tb.opacity).toBe(1);
-    // example 已永久剔除，不会补回（符合预期）
-    expect('example' in restored.variableMeta.variables[0]).toBe(false);
+    expect(restored.variableMeta.schema).toEqual([{ path: 'user.name', defaultValue: '默认名' }]);
   });
 });
 

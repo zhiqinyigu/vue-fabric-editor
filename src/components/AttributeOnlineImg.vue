@@ -10,12 +10,17 @@
   <AttrSection v-if="isOne && isMatchType && isOnlineImg" :title="t('attributes.online_image_url')">
     <AttrField editable>
       <Input
+        ref="urlInput"
         v-model="baseAttr.url"
         :placeholder="t('insertFile.insert_online_image_placeholder')"
         @on-change="onUrlChange"
         @on-enter="flushUrlChange"
         @on-blur="flushUrlChange"
-      />
+      >
+        <template v-if="varSchemaAvailable" #append>
+          <VariableInsertPopover filter-type="image" @select="insertVariable" />
+        </template>
+      </Input>
     </AttrField>
   </AttrSection>
 </template>
@@ -27,21 +32,30 @@ import {
   getCurrentInstance,
   onMounted,
   onBeforeUnmount,
+  nextTick,
 } from '@vue/composition-api';
 import useSelect from '@/hooks/select';
 import { Message } from 'view-design';
+import VariableInsertPopover from './VariableInsertPopover.vue';
+import { insertAtCursor, getInputElement, focusCaret } from '@/utils/cursorInsert';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import AttrField from '@/components/attrPanel/AttrField.vue';
 
 export default {
   name: 'AttributeOnlineImg',
   components: {
+    VariableInsertPopover,
     AttrSection,
     AttrField,
   },
   setup() {
     const update = getCurrentInstance();
     const { isOne, isMatchType, canvasEditor, t } = useSelect(['image']);
+    // 变量表可用性：append 槽位级守卫（无 schema 时不渲染插入变量入口）。
+    // adapter 在编辑器初始化即绑定，属静态事实，本地 ref 即可（避免频繁重挂载累积监听器）
+    const varSchemaAvailable = ref(
+      !!(canvasEditor.getSchemaAdapter && canvasEditor.getSchemaAdapter())
+    );
 
     // 是否为网络图片（src 为 http/https 地址，而非 base64）
     const isOnlineImg = ref(false);
@@ -176,9 +190,24 @@ export default {
     };
 
     const selectCancel = () => {
+      clearUrlTimer();
       isOnlineImg.value = false;
       baseAttr.url = '';
       update?.proxy?.$forceUpdate();
+    };
+
+    // 插入变量 URL（支持 https://cdn/{{id}}.png 模板串）；
+    // 与手动输入一致，立即应用 → 变量插件重建占位图
+    const urlInput = ref(null);
+    const insertVariable = (path) => {
+      const vp = getVariablePlugin();
+      const d = vp && vp.getDelimiter ? vp.getDelimiter() : { start: '{{', end: '}}' };
+      const token = `${d.start}${path}${d.end}`;
+      const el = getInputElement(urlInput.value, 'input.ivu-input');
+      const { next, caret } = insertAtCursor(el, baseAttr.url, token);
+      baseAttr.url = next;
+      flushUrlChange();
+      nextTick(() => focusCaret(el, caret));
     };
 
     onMounted(() => {
@@ -203,6 +232,9 @@ export default {
       saveUrl,
       onUrlChange,
       flushUrlChange,
+      urlInput,
+      insertVariable,
+      varSchemaAvailable,
       t,
     };
   },

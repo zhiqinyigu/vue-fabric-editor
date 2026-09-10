@@ -127,6 +127,18 @@ describe('变量图片序列化：保存变量 URL 而非 base64', () => {
     });
   });
 
+  it('fromObject：真实 URL + isVariableImage 标记不被占位劫持（token-only 判据）', (done) => {
+    const URL = 'https://cdn.example.com/real.png';
+    fabric.Image.fromObject({ type: 'image', src: URL, isVariableImage: true }, (img, isError) => {
+      expect(isError).toBe(false);
+      expect(img.get('src')).toBe(URL);
+      expect(img._element.src).toBe(URL);
+      // 未挂载占位叠加层（不是变量字面量，不触发占位）
+      expect(img.get('showPlaceholderText')).toBeUndefined();
+      done();
+    });
+  });
+
   it('clone 变量图片不崩溃且保留变量链接', (done) => {
     plugin.createVariableImage(VAR_URL).then((img) => {
       img.clone(
@@ -1397,5 +1409,105 @@ describe('背景图模板变量（image / rect+Pattern 双形态）', () => {
   it('renderObjects 空变量 → 背景 src 置空（渲染端按 D2 无背景）', () => {
     const out = renderObjects(makeVarBgJson('cover'), {});
     expect(out.objects[1].src).toBe('');
+  });
+});
+
+describe('预览空数据隐藏（渲染器同语义：无值字段元素不显示，退出还原）', () => {
+  function makeExtImage(data, extensionType) {
+    const field = extensionType === 'qrcode' ? 'data' : 'value';
+    const img = new fabric.Image(makeImageElement('https://cdn.example.com/placeholder.png'), {});
+    img.set('extensionType', extensionType);
+    img.set('extension', { [field]: data });
+    img.set({ left: 10, top: 20, width: 300, height: 300, scaleX: 1, scaleY: 1 });
+    return img;
+  }
+  function makeCanvas(objs) {
+    return {
+      on: () => {},
+      off: () => {},
+      getObjects: () => objs,
+      requestRenderAll: () => {},
+      discardActiveObject: () => {},
+      selection: true,
+      skipTargetFind: false,
+      defaultCursor: 'default',
+    };
+  }
+
+  it('图片变量无预览值：预览隐藏对象且不触发资源替换，退出恢复可见', (done) => {
+    const spy = mockLoadImage();
+    const plugin = createPlugin();
+    plugin.createVariableImage(VAR_URL).then((img) => {
+      plugin.canvas.getObjects = () => [img];
+      plugin.canvas.discardActiveObject = () => {};
+      const elementBefore = img._element;
+
+      plugin.enterPreview();
+      expect(plugin.isPreviewing()).toBe(true);
+      // 无预览值（且 schema 无默认值兜底）：渲染 computed 结果为空串 → 元素隐藏
+      expect(img.get('visible')).toBe(false);
+      expect(plugin.getHiddenPreviewCount()).toBe(1);
+      // 不触发资源替换：存储 src 保持变量 URL、element 未被换
+      expect(img.get('src')).toBe(VAR_URL);
+      expect(img._element).toBe(elementBefore);
+
+      plugin.exitPreview();
+      expect(img.get('visible')).toBe(true);
+      expect(plugin.getHiddenPreviewCount()).toBe(0);
+      spy.mockRestore();
+      done();
+    });
+  });
+
+  it('二维码无预览值：预览隐藏且 extension 内容不被空串污染，退出恢复可见', () => {
+    const img = makeExtImage('{{$qr}}', 'qrcode');
+    const p = new VariablePlugin(makeCanvas([img]), { emit: () => {}, getPlugin: () => null });
+
+    p.enterPreview();
+    expect(img.get('visible')).toBe(false);
+    expect(p.getHiddenPreviewCount()).toBe(1);
+    // 存储值不写回空串（污染源被跳过）
+    expect(img.get('extension').data).toBe('{{$qr}}');
+
+    p.exitPreview();
+    expect(img.get('visible')).toBe(true);
+    expect(img.get('extension').data).toBe('{{$qr}}');
+  });
+
+  it('部分填写：已填的资源正常替换，未填的隐藏', async () => {
+    const spy = mockLoadImage();
+    try {
+      const qr = makeExtImage('{{$qr}}', 'qrcode');
+      const p = new VariablePlugin(makeCanvas([qr]), { emit: () => {}, getPlugin: () => null });
+      const img = await p.createVariableImage(VAR_URL);
+      p.canvas.getObjects = () => [img, qr];
+      p.canvas.discardActiveObject = () => {};
+      p.setTestData({ 'user.avatar': 'real.png' });
+
+      p.enterPreview();
+      // 头像已填 → 正常加载显示；二维码未填 → 隐藏
+      expect(img.get('src')).toBe('https://cdn.example.com/avatar/real.png');
+      expect(img.get('visible')).toBe(true);
+      expect(qr.get('visible')).toBe(false);
+      expect(p.getHiddenPreviewCount()).toBe(1);
+
+      p.exitPreview();
+      expect(qr.get('visible')).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('模板本身 visible=false 的对象：退出预览仍保持隐藏（不被还原成可见）', () => {
+    const img = makeExtImage('{{$qr}}', 'qrcode');
+    img.set('visible', false);
+    const p = new VariablePlugin(makeCanvas([img]), { emit: () => {}, getPlugin: () => null });
+
+    p.enterPreview();
+    expect(img.get('visible')).toBe(false);
+    expect(p.getHiddenPreviewCount()).toBe(0); // 本就不可见，不计入隐藏提示
+
+    p.exitPreview();
+    expect(img.get('visible')).toBe(false);
   });
 });

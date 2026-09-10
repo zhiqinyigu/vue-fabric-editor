@@ -19,6 +19,7 @@ import RendererCore from '@/core/RendererCore';
 import { renderObjects, DEFAULT_DELIMITER } from '@/core/variableEngine';
 import { layoutVariableImages } from '@/core/variableImageFit';
 import { installImageRenderGuard } from '@/core/patchImageRender';
+import { applySchemaDefaults, resolveRenderSchema } from '@/core/variableSchema';
 
 export default {
   name: 'FabricRenderer',
@@ -27,6 +28,10 @@ export default {
     json: { type: [Object, String], default: null },
     // 变量渲染数据（点路径取值，如 { user: { name: '张三' } }）
     data: { type: Object, default: () => ({}) },
+    // 变量表（可选注入）：defaultValue 缺失回退（渲染容错，不中断渲染）；
+    // 未注入时回读模板自带 variableMeta.schema（完整/精简导出均携带），
+    // 显式注入的 schema prop 完全优先（不 merge）
+    schema: { type: Array, default: null },
     // 与编辑器同契约：{ font: { list: () => [{ name, file, type, img }] } }
     adapters: { type: Object, default: () => ({}) },
     options: { type: Object, default: () => ({}) },
@@ -48,6 +53,13 @@ export default {
       return json || null;
     };
 
+    // 模板模式（原样展示）：不做变量替换，直接渲染模板 JSON——与编辑器画布同源，
+    // 未解析变量由对象层占位补丁自然呈现（图片占位/文本字面量/变量背景占位）。
+    // 数据模式（示例/C 端）：替换后交给渲染器原生语义（缺值元素被丢弃）。
+    // 兼容旧 option 名 variablePlaceholder（等价于 templateMode）。
+    const isTemplateMode = () =>
+      props.options.templateMode === true || props.options.variablePlaceholder === true;
+
     const render = async () => {
       if (!core || !props.json) return;
       const seq = ++renderSeq;
@@ -57,11 +69,27 @@ export default {
           (raw && raw.variableMeta && raw.variableMeta.delimiter) ||
           props.options.delimiter ||
           DEFAULT_DELIMITER;
-        // 1) 变量替换（深拷贝，不污染传入 JSON）
-        const substituted = renderObjects(raw, props.data || {}, delimiter);
+        let loadJson;
+        if (isTemplateMode()) {
+          // 原样：不注入任何数据（token 原样保留）
+          loadJson = raw;
+        } else {
+          // 0) 变量表（可选注入）：defaultValue 缺失回退；未注入时回读模板自带快照
+          const schema = resolveRenderSchema(
+            raw,
+            props.schema,
+            props.options && props.options.schema
+          );
+          let renderData = props.data || {};
+          if (schema) {
+            renderData = applySchemaDefaults(renderData, schema);
+          }
+          // 1) 变量替换（深拷贝，不污染传入 JSON）
+          loadJson = renderObjects(raw, renderData, delimiter);
+        }
         // 2) 加载：manifest 展开 / 缺省字段补回 / 二维码·条形码参数还原 / 字体加载
         //    hookImportAfter 由 RendererWorkspacePlugin 自动执行（workspace 呈现 + 设计态基准）
-        await core.loadJSON(substituted);
+        await core.loadJSON(loadJson);
         if (seq !== renderSeq) return; // 已有更新的渲染请求，丢弃本次结果
         // 3) autoGrow 增高（与编辑器预览同规则）
         const autoGrow = core.getPlugin('RendererAutoGrowPlugin');
@@ -93,16 +121,13 @@ export default {
       });
       const fontAdapter = props.adapters.font;
       core = new RendererCore(canvas, {
+        // 渲染器 options 整体透传（templateMode / delimiter / defaultQrCodeData / cacheBust /
+        // crossOrigin 等），避免逐键枚举遗漏（如 templateMode 未透传会导致原样模式失效）
+        ...props.options,
         getFonts:
           fontAdapter && typeof fontAdapter.list === 'function'
             ? () => fontAdapter.list()
             : undefined,
-        defaultQrCodeData: props.options.defaultQrCodeData,
-        // 「按接入域名分片缓存」配置透传：默认 feDomain=location.hostname，传 false 关闭，传 { param, getValue } 自定义
-        cacheBust: props.options.cacheBust,
-        // 图片跨域策略透传：默认 'anonymous'（CORS 失败自动回退无 crossOrigin 保显示）；
-        // null 直接无 crossOrigin；'strict' 严格 CORS（失败即不显示）
-        crossOrigin: props.options.crossOrigin,
       });
       // 背景图加载失败（CORS/URL 失效）→ 默认 console 警告 + 转发 renderer-error 事件，
       // 宿主可自行监听覆盖（如 toast 提示）
@@ -113,7 +138,10 @@ export default {
       });
       // 导出被跨域图片污染（tainted canvas）拦截 → 转发 renderer-error 供宿主提示
       core.on('save:error', (err) => {
-        const payload = { code: (err && err.code) || 'CANVAS_TAINTED', message: err && err.message };
+        const payload = {
+          code: (err && err.code) || 'CANVAS_TAINTED',
+          message: err && err.message,
+        };
         // eslint-disable-next-line no-console
         console.warn('[FabricRenderer]', payload);
         emit('renderer-error', payload);
@@ -135,6 +163,13 @@ export default {
         if (core) render();
       },
       { deep: true }
+    );
+    // 变量表变化时重新渲染（默认值/校验随 schema 生效）
+    watch(
+      () => props.schema,
+      () => {
+        if (core) render();
+      }
     );
 
     onBeforeUnmount(() => {

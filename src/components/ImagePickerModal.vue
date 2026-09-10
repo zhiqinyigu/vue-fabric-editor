@@ -47,10 +47,16 @@
       <TabPane :label="$t('insertFile.insert_online_image_url')" name="url">
         <div class="online-img-row">
           <Input
+            ref="urlInput"
+            :key="varSchemaAvailable ? 'vip' : 'plain'"
             v-model="url"
             :placeholder="$t('insertFile.insert_online_image_placeholder')"
             @on-enter="confirm"
-          />
+          >
+            <template v-if="varSchemaAvailable" #append>
+              <VariableInsertPopover filter-type="image" @select="insertVariable" />
+            </template>
+          </Input>
           <Upload
             v-if="hasAsset"
             :before-upload="handleUpload"
@@ -76,12 +82,14 @@
 </template>
 
 <script>
-import { ref, computed, watch } from '@vue/composition-api';
+import { ref, computed, watch, nextTick } from '@vue/composition-api';
 import { Message } from 'view-design';
 import useImagePicker from '@/hooks/useImagePicker';
 import { useEditorContext } from '@/hooks/useEditorContext';
 import useSelect from '@/hooks/select';
 import { useI18n } from '@/hooks/useI18n';
+import VariableInsertPopover from './VariableInsertPopover.vue';
+import { insertAtCursor, getInputElement, focusCaret } from '@/utils/cursorInsert';
 import { normalizeAssetUrl } from '@/core/assetUrl';
 
 // 将在线图片转为本地 base64（drawImage 到临时 canvas 后 toDataURL）
@@ -108,12 +116,24 @@ function urlToBase64(url) {
 
 export default {
   name: 'ImagePickerModal',
+  components: {
+    VariableInsertPopover,
+  },
   setup() {
     const { pickerState, closeImagePicker } = useImagePicker();
     const { registry, remoteImageMode } = useEditorContext();
     const { canvasEditor } = useSelect();
     const { t } = useI18n();
     const $t = (key) => t(key);
+    // 变量表可用性：append 槽位级守卫（无 schema 时不渲染插入变量入口）。
+    // 本弹窗挂载早于编辑器初始化（adapter 注入在编辑器 onMounted），setup 时判定必为 false，
+    // 故在打开时再判定一次（adapter 注入后属静态事实，无需响应式追踪）
+    // 变量表可用性：append 槽位级守卫（无 schema 时不渲染插入变量入口）。
+    // 本弹窗挂载早于编辑器初始化（adapter 注入在编辑器 onMounted），setup 时判定必为 false，
+    // 故在打开时再判定一次（adapter 注入后属静态事实，无需响应式追踪）。
+    // 注：view-design Input 的 append 盒由 $slots.append 非响应式 computed 门控，
+    // 槽位后出现不会触发重渲染，需以 :key 重挂载 Input 让 append 盒按新槽位重建
+    const varSchemaAvailable = ref(false);
 
     const activeTab = ref(remoteImageMode ? 'url' : 'local');
     const url = ref('');
@@ -132,7 +152,12 @@ export default {
     watch(
       () => pickerState.open,
       (v) => {
-        if (v) resetInputs();
+        if (v) {
+          varSchemaAvailable.value = !!(
+            canvasEditor.getSchemaAdapter && canvasEditor.getSchemaAdapter()
+          );
+          resetInputs();
+        }
       }
     );
 
@@ -307,6 +332,19 @@ export default {
       resetInputs();
     };
 
+    // 插入变量 URL（支持 https://cdn/{{id}}.png 模板串）；
+    // 确认时走现有 confirmUrl 管线（变量 URL → 占位图 / 背景 onDone 分流）
+    const urlInput = ref(null);
+    const insertVariable = (path) => {
+      const vp = canvasEditor.getPlugin && canvasEditor.getPlugin('VariablePlugin');
+      const d = vp && vp.getDelimiter ? vp.getDelimiter() : { start: '{{', end: '}}' };
+      const token = `${d.start}${path}${d.end}`;
+      const el = getInputElement(urlInput.value, 'input.ivu-input');
+      const { next, caret } = insertAtCursor(el, url.value, token);
+      url.value = next;
+      nextTick(() => focusCaret(el, caret));
+    };
+
     return {
       pickerState,
       modalTitle,
@@ -315,6 +353,7 @@ export default {
       url,
       convertToLocal,
       localInput,
+      urlInput,
       dragging,
       hasAsset,
       triggerLocalPicker,
@@ -322,7 +361,9 @@ export default {
       onLocalDrop,
       handleUpload,
       confirm,
+      insertVariable,
       onCancel,
+      varSchemaAvailable,
     };
   },
 };

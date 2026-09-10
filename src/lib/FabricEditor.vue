@@ -20,6 +20,12 @@
             <div class="fe-top-right">
               <!-- <PreviewCurrent /> -->
               <Clear v-if="showSaveButton" />
+              <Button v-if="!previewing" type="primary" ghost @click="onQuickPreview">
+                {{ t('variable.quick_preview') }}
+              </Button>
+              <Button v-else type="warning" ghost @click="onQuickPreview">
+                {{ t('variable.restore') }}
+              </Button>
               <Save v-if="showSaveButton" />
               <Button
                 v-if="showSaveButton"
@@ -332,6 +338,28 @@ export default {
         .use(VariablePlugin)
         .use(AutoGrowPlugin);
 
+      // 变量表（schema）注入：adapters.variable → VariablePlugin（业务无关协议，
+      // 与 font/size 同构）。懒加载：ready 时不拉取，首次使用时 ensureSchemaLoaded
+      if (props.adapters.variable) {
+        const vp = editor.getPlugin('VariablePlugin');
+        if (vp && vp.setSchemaAdapter) vp.setSchemaAdapter(props.adapters.variable);
+      }
+
+      // 开发者后门（A+C）：?varEdit=1 或 localStorage['fe:variable-editable']==='1'
+      // 自动解锁变量表编辑（跳过 imported 只读限制），仅开发联调使用
+      const devUnlockSchema = (() => {
+        try {
+          if (typeof location !== 'undefined' && /[?&]varEdit=1/.test(location.search)) return true;
+          return localStorage.getItem('fe:variable-editable') === '1';
+        } catch (e) {
+          return false;
+        }
+      })();
+      if (devUnlockSchema) {
+        const vp = editor.getPlugin('VariablePlugin');
+        if (vp && vp.setSchemaEditable) vp.setSchemaEditable(true);
+      }
+
       ctx.canvas = canvas;
       state.ready = true;
       if (state.ruler) editor.rulerEnable();
@@ -369,6 +397,30 @@ export default {
       emit('save-request', { json: editor.getJson() });
     };
 
+    // ---- 快速预览 ----
+    // 行为等价变量弹窗 footer 的预览按钮（应用测试数据进入预览）；预览态切换为还原。
+    // 顶栏常显，无法沿用弹窗打开时的 variables 快照做 disabled，点击时实时扫描兜底
+    const previewing = ref(false);
+    editor.on('variable:previewChange', (val) => {
+      previewing.value = !!val;
+    });
+    const onQuickPreview = () => {
+      if (previewing.value) {
+        editor.exitPreview();
+        return;
+      }
+      if (editor.getVariables().length === 0) {
+        Message.info(t('variable.no_variable'));
+        return;
+      }
+      editor.enterPreview();
+      // 缺数据字段（无测试值/默认值兜底）预览隐藏，与渲染器"元素消失"同语义：可读性提示
+      const hiddenCount = editor.getHiddenPreviewCount && editor.getHiddenPreviewCount();
+      if (hiddenCount > 0) {
+        Message.warning(t('variable.preview_hidden_hint'));
+      }
+    };
+
     onMounted(() => {
       initCanvas();
       if (instance && instance.proxy) instance.proxy.api = api;
@@ -393,6 +445,8 @@ export default {
       // toggleRuler,
       showSaveButton,
       onSaveRequest,
+      previewing,
+      onQuickPreview,
       api,
     };
   },

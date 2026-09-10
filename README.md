@@ -227,6 +227,7 @@ export default {
       adapters: {
         font: { list: () => fetch('/api/fonts').then((r) => r.json()) },
         size: { list: () => Promise.resolve([{ id: 1, name: '海报', width: 400, height: 600, unit: 'px' }]) },
+        variable: { list: () => Promise.resolve([{ path: 'course.name', label: '课程名', type: 'text' }]) },
       },
       extensions: [], // 见 §4
     };

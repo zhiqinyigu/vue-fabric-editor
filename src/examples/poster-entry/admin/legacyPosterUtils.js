@@ -7,7 +7,7 @@
  */
 
 /** 旧版 posterConfig 的内容字段（任一非空即视为已配置） */
-export const LEGACY_VALUE_FIELDS = [
+const LEGACY_VALUE_FIELDS = [
   'background',
   'backgroundColor',
   'avatarPosition',
@@ -52,6 +52,9 @@ const VAR_PATH_REG = /^[\p{L}_$][\p{L}\p{N}_$]*(\.[\p{L}_$][\p{L}\p{N}_$]*)+$/u;
 const isVarToken = (key) => VAR_IDENT_REG.test(key) || VAR_PATH_REG.test(key);
 // 表达式上下文键（jsonList 图片字段 {naturalWidth} 等求值用）不是业务变量
 const EXPR_CONTEXT_KEYS = ['naturalWidth', 'naturalHeight'];
+// 二维码/条形码内容字段（extension 嵌套）；内容变量按“文本型”兜底（缺值填 {key}），
+// 否则数据模式下内容被清空 → 生成端报 "QR code is empty" → 元素被丢弃
+const EXTENSION_CONTENT_FIELD = { qrcode: 'data', barcode: 'value' };
 
 /**
  * 从旧格式 posterConfig 自动扫描变量名候选集（业务未传 scopeKeys 时的兜底）。
@@ -106,12 +109,16 @@ function forEachDoubleBraceVar(text, onMatch) {
 }
 
 // 标准 JSON 变量分类扫描：文本对象 text 中的 {{key}} 为文本变量；
-// isVariableImage 图片对象 src 的 {{key}} 为图片变量（不填，渲染期经 data 注入）
-function forEachStandardVarKey(obj, onText, onImage) {
+// 图片对象（image 形态，含 legacy 转换产物的头像/变量图——它们无 isVariableImage 标记）
+// src 的 {{key}} 为图片变量（占位兜底注册时渲染期显示占位，缺值时仍不注入示例 URL）；
+// 二维码/条形码的 extension.data / extension.value 内容变量单独收集（onCode）兜底
+function forEachStandardVarKey(obj, onText, onImage, onCode) {
   (obj.objects || []).forEach((o) => {
     if (!o || typeof o !== 'object') return;
     forEachDoubleBraceVar(o.text, onText);
-    if (o.isVariableImage) forEachDoubleBraceVar(o.src, onImage);
+    if (o.type === 'image' || o.isVariableImage) forEachDoubleBraceVar(o.src, onImage);
+    const extField = o.extensionType && EXTENSION_CONTENT_FIELD[o.extensionType];
+    if (extField) forEachDoubleBraceVar(o.extension && o.extension[extField], onCode);
   });
 }
 
@@ -156,24 +163,61 @@ function setPathValue(data, path, value) {
   current[segments[segments.length - 1]] = value;
 }
 
+// 默认示例图：240x160 纯色底 dataURL。规格与 @/core/variablePlaceholder.js 的
+// makeVariablePlaceholderDataUrl 一致（parity 由 legacyPosterUtils.test.js 守护）；
+// 此处独立实现以保持本文件可整体拷贝，不引用主包内部模块。无 canvas 环境返回 ''
+function makeDefaultImageDataUrl() {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 240;
+    canvas.height = 160;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#F1F3F5';
+    ctx.fillRect(0, 0, 240, 160);
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    return '';
+  }
+}
+
+// 图片变量默认示例图：惰性生成并缓存，失败（无 canvas 环境等）退化为空串 →
+// 调用方跳过写入，保持原“不填”行为
+let cachedDefaultImageSample;
+function getDefaultImageSample() {
+  if (cachedDefaultImageSample === undefined) {
+    try {
+      cachedDefaultImageSample = makeDefaultImageDataUrl() || '';
+    } catch (e) {
+      cachedDefaultImageSample = '';
+    }
+  }
+  return cachedDefaultImageSample;
+}
+
 /**
  * 未传/缺省 sampleData 时的示例值自动推导（按 key 与外部传入合并，外部优先）。
  * 旧格式：文本变量（text[].text / jsonList obj.text）→ 填 `{key}`（预览显示变量名占位）；
- * 图片变量（img[].src / jsonList obj.src）不填：转换器对有值的图片变量走静态固化，
- * 填 `{key}` 会被当 URL 加载失败导致元素丢弃；不填则保留变量图分支（占位框 + 渲染期拉伸）。
- * 标准 fabric JSON（编辑器保存回传后的值形态）：文本对象 text 中的 {{key}} → 填 `{key}`；
- * isVariableImage 的变量图不填（渲染期经 data 注入），与旧格式语义一致。
- * 同名 key 若同时用于图片，一律不填（避免触发图片静态固化）。
+ * 标准 fabric JSON（编辑器保存回传后的值形态）：文本对象 text 中的 {{key}} → 填 `{key}`。
+ * 图片变量不填 `{key}` 占位（占位串会被当 URL 加载失败导致元素丢弃），示例值来源见下。
  * 示例值优先级：业务 sampleData（Entry.vue 顶层浅合并覆盖）>
- * variableMeta.schema[].example（编辑器全量导出的海报自带）> 默认 `{key}` 占位。
- * 图片变量一律不填（variableMeta 有示例也不填）：保持变量图分支（占位框 + 渲染期经 data 注入），
- * 避免示例 URL 触发静态固化 / 跨域加载失败被跳过。
+ * 后台变量表 remoteSchemaDefs 示例（variableSchemaAdapter 拉取，多人协同权威）>
+ * variableMeta.schema 内嵌快照；文本变量末位退 `{key}` 占位。
+ * 文本变量：schema/后台有 example → 注入；否则 `{key}` 占位。
+ * 图片变量：example（图片 URL）> defaultValue（渲染回退图，需早于默认纯色以防被遮蔽）>
+ * 默认纯色图（规格同 variablePlaceholder 占位底图，保证示例模式不缺图）。
+ * 二维码/条形码内容变量（标准 JSON 的 extension.data / extension.value）按“文本型”兜底：
+ * example > defaultValue > `{key}`（示例模式生成占位码；否则内容被清空 → 生成端报
+ * "QR code is empty" → 元素被丢弃）。注意旧格式原始配置不含该变量（转换器写死
+ * {{$posterShareUrl}}），须在**转换后的标准 JSON** 上派生（LegacyPosterEntry 即此路径）。
+ * 同名 key 同时用于文本与图片：一律不填（同一数据路径只能一个值，URL 会以文本形式显示）。
  * 点路径变量（如 {course.trainStage.stageIndex}）按嵌套结构写入（见 setPathValue），
  * 扁平变量仍平铺写入；同根扁平与路径冲突时路径优先（扁平 key 已成对象则跳过）。
  * @param {Object|String} config 旧格式对象 / 标准 fabric JSON / JSON 字符串
+ * @param {Array} [remoteSchemaDefs] 后台变量表定义数组（adapters.variable list 的产物；
+ *        同 path 覆盖内嵌快照；缺省/为空时行为不变）
  * @returns {Object} 示例数据（非旧格式且非标准 objects / 非法 JSON → {}）
  */
-export function deriveFallbackSampleData(config) {
+export function deriveFallbackSampleData(config, remoteSchemaDefs) {
   let obj = config;
   if (typeof obj === 'string') {
     try {
@@ -184,6 +228,7 @@ export function deriveFallbackSampleData(config) {
   }
   const imgKeys = new Set();
   const textKeys = new Set();
+  const codeKeys = new Set();
   const makeCollect = (set) => (key) => {
     const k = String(key).trim();
     if (isVarToken(k) && EXPR_CONTEXT_KEYS.indexOf(k) === -1) set.add(k);
@@ -191,33 +236,71 @@ export function deriveFallbackSampleData(config) {
   if (isLegacyPosterConfig(obj)) {
     forEachLegacyVarKey(obj, makeCollect(textKeys), makeCollect(imgKeys));
   } else if (obj && typeof obj === 'object' && Array.isArray(obj.objects)) {
-    forEachStandardVarKey(obj, makeCollect(textKeys), makeCollect(imgKeys));
+    forEachStandardVarKey(obj, makeCollect(textKeys), makeCollect(imgKeys), makeCollect(codeKeys));
   } else {
     return {};
   }
   // variableMeta.schema 示例值（编辑器全量导出自带；精简导出仅 {path, defaultValue}
-  // 无 example，天然退占位——defaultValue 回退由渲染端 applySchemaDefaults 处理）
+  // 无 example，此时图片走 defaultValue / 默认纯色，二维码/条形码走 defaultValue / `{key}`）。
+  // remoteSchemaDefs（后台变量表）后写入：同 path 覆盖内嵌快照（后台权威，多人协同）。
+  // defaultValue 仅用于图片与二维码/条形码，避免遮蔽文本变量渲染端 applySchemaDefaults 的既有回退
   const exampleMap = new Map();
-  const schema =
+  const defaultValueMap = new Map();
+  const fillDefs = (defs, field, map) => {
+    (Array.isArray(defs) ? defs : []).forEach((d) => {
+      if (!d || typeof d.path !== 'string') return;
+      const key = d.path.trim();
+      if (!key || d[field] == null || d[field] === '') return;
+      map.set(key, String(d[field]));
+    });
+  };
+  const embeddedSchema =
     obj && obj.variableMeta && Array.isArray(obj.variableMeta.schema)
       ? obj.variableMeta.schema
       : [];
-  schema.forEach((d) => {
-    if (!d || typeof d.path !== 'string') return;
-    const key = d.path.trim();
-    if (!key || d.example == null || d.example === '') return;
-    exampleMap.set(key, String(d.example));
-  });
+  fillDefs(embeddedSchema, 'example', exampleMap);
+  fillDefs(remoteSchemaDefs, 'example', exampleMap);
+  fillDefs(embeddedSchema, 'defaultValue', defaultValueMap);
+  fillDefs(remoteSchemaDefs, 'defaultValue', defaultValueMap);
 
   const data = {};
-  textKeys.forEach((k) => {
+  // 二维码/条形码内容变量：example > defaultValue > `{key}`（占位码）；defaultValue 需优先于
+  // `{key}`，否则占位会遮蔽渲染端 applySchemaDefaults 的既有回退。同名图片变量的场景让位图片。
+  codeKeys.forEach((k) => {
     if (imgKeys.has(k)) return;
+    let value;
+    if (exampleMap.has(k)) value = exampleMap.get(k);
+    else if (defaultValueMap.has(k)) value = defaultValueMap.get(k);
+    else value = `{${k}}`;
+    if (VAR_PATH_REG.test(k)) {
+      setPathValue(data, k, value);
+    } else if (typeof data[k] !== 'object') {
+      data[k] = value;
+    }
+  });
+  textKeys.forEach((k) => {
+    if (imgKeys.has(k) || codeKeys.has(k)) return;
     const value = exampleMap.has(k) ? exampleMap.get(k) : `{${k}}`;
     if (VAR_PATH_REG.test(k)) {
       // 点路径变量：嵌套写入（与业务真值的嵌套对象/平铺点 key 两种写法均兼容）
       setPathValue(data, k, value);
     } else if (typeof data[k] !== 'object') {
       // 扁平变量平铺写入；同根已由路径构建成对象时跳过（路径优先，见 setPathValue 注释）
+      data[k] = value;
+    }
+  });
+  // 图片变量：example（图片 URL）> defaultValue（渲染回退图）> 默认纯色图；
+  // 保证示例模式不再丢图（此前无 example 保持不填 → renderObjects 清空 token → 对象被丢弃）
+  imgKeys.forEach((k) => {
+    if (textKeys.has(k)) return;
+    let value;
+    if (exampleMap.has(k)) value = exampleMap.get(k);
+    else if (defaultValueMap.has(k)) value = defaultValueMap.get(k);
+    else value = getDefaultImageSample();
+    if (!value) return;
+    if (VAR_PATH_REG.test(k)) {
+      setPathValue(data, k, value);
+    } else if (typeof data[k] !== 'object') {
       data[k] = value;
     }
   });
@@ -289,16 +372,4 @@ export async function convertLegacyToStandard(value, options = {}) {
   const json = await m.convertLegacyPoster(obj, { ...options, scopeKeys });
   if (options.forEditor) json.objects.forEach(stripInteractiveLocks);
   return JSON.stringify(json);
-}
-
-/**
- * 渲染后布局旧版标记对象（头像圆形裁切 / 变量图拉伸到配置框）。
- * 动态加载转换器（含 fabric，重依赖），供渲染完成钩子调用。
- * @param {Object} canvas fabric canvas
- * @returns {Boolean} 是否有对象被布局
- */
-export async function layoutLegacyImages(canvas) {
-  if (!canvas) return false;
-  const m = await import('@/examples/smart-poster/legacy/legacyConverter');
-  return m.layoutLegacyImages(canvas);
 }

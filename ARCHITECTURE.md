@@ -22,6 +22,7 @@
 | 改画布背景/尺寸/裁剪几何 | §5 | `src/core/workspaceGeometry.js` |
 | 改「保存瘦身 / 加载补回」字段 | §5 + §6 | `jsonOptimizer.js` + `objectDefaults.js` 对称改 |
 | 改变量替换 / autoGrow 规则 | §5 | `variableEngine.js`（两端共用） |
+| 改变量表（schema）注入/权限/持久化 | §10 | `VariablePlugin` + `variableSchema.js` |
 | 改图片加载 / 跨域 / 导出 | §6 + §7.4 | `ServersPlugin` / `imageLoader.js` |
 | 处理"宿主环境差异"（多副本实例、素材路径） | §7 | `runtime.js` / `canvasAsset.js` |
 | 新增包内导出、改构建产物 | §8 + §9 | `src/lib/index.js` / `src/lib/renderer.js` / `vue.config.js` |
@@ -42,6 +43,7 @@
 | §7 | 运行时能力层：单实例注入、素材解析、渲染守卫、CORS 回退 |
 | §8 | 构建期宿主契约：`loader/`（webpack 插件 / 素材 loader）与 `types/` |
 | §9 | 对外导出面（改这里等于改契约） |
+| §10 | 变量 Schema 注入体系（契约 / 铁律 / 注入面 / UI / 验证） |
 | §11 | 开发约束与检查清单 + 验证命令 + 测试约定 |
 
 ---
@@ -189,6 +191,7 @@ render()
 | --- | --- | --- |
 | `workspaceGeometry.js` | `computeBackgroundLayout` / `cloneWorkspaceAsClip` / `createBackgroundObject` / `alignToFactor` | 背景 cover/contain/tile 布局、clip 克隆兜底、背景对象创建 |
 | `variableEngine.js` | `render` / `renderObjects` / `extractVariables` / `computeAutoGrowSize` / `DEFAULT_DELIMITER` | 变量替换与 autoGrow 计算 |
+| `variableSchema.js` | `mergeVariableSchema` / `applySchemaDefaults` / `applySchemaDefaultsFlat` / `applySchemaExamplesFlat` / `resolveRenderSchema` / `inferVariableType` / `validateVariableDef` | 变量表对齐、默认值补齐、示例预填、C 端 schema 解析优先级、类型推断 |
 | `jsonOptimizer.js` | `stripDefaultFields` / `normalizeDefaultFields` / `stripCanvasDefaults` / `normalizeCanvasDefaults` / `patchImageCrossOrigin` | JSON 瘦身（编辑端剔除缺省字段）与还原（渲染端补回） |
 | `objectDefaults.js` | `OBJECT_DEFAULTS` / `getDefaultsForType` | 各类对象缺省值 |
 | `assetUrl.js` | `normalizeAssetUrl` / `appendCacheBustParam` | 资源 URL 归一与分片缓存参数 |
@@ -281,6 +284,63 @@ render()
 
 ---
 
+## 10. 变量 Schema（变量字典）注入体系
+
+> 解决「变量占位符纯手打 + 变量表游离在工作流外」的割裂问题：
+> 业务定义变量表 → 业务无关协议注入编辑器 → 插入变量/对齐视图/收编 → 渲染容错。
+
+### 10.1 数据契约（`types/index.d.ts`）
+
+- `VariableDef`：`{ path, label, type: 'text'|'image'|'qrcode'|'barcode', example?, defaultValue?, description? }`。
+  `path` 是唯一键且**创建后不可改**（画布占位符的锚点）。
+- `VariableSchemaAdapter`：`{ list(): Promise<VariableDef[]>; save?(defs): Promise<void> }`。
+  `save` 为全量保存（业务侧自 diff，last-write-wins）；未实现时编辑器降级为「导出变量表 JSON」。
+- `VariableMeta`：模板持久化的变量元数据（保存时派生，见 §10.2 第 1 条）——
+  `{ version?, delimiter?, schema?: VariableMetaDef[] }`。
+
+### 10.2 铁律
+
+1. **schema 的持久化形态 = variableMeta.schema 模板快照（双形状）**：会话态权威在「VariablePlugin 内存 + 业务后台」；模板 JSON 持久化的是保存那一刻的快照，不进 `jsonOptimizer` 对称链。两条导出链路（`ServersPlugin.getJson(complete)` 分流）：
+   - **完整导出**（`saveJson` 下载）：`schema` = 全量会话表（未用变量也带——现在没用 ≠ 以后不用，重开即可插入）+ 画布已用未定义路径合成 def（label=path、类型按占位字段推断、src=custom）；条目带 `src`（imported/custom）来源标记，回导时还原编辑权限。
+   - **精简导出**（剪贴板 / `save-request` 提交，C 端专用）：`schema` 仅含「已使用 ∧ 非空 defaultValue」的 `{ path, defaultValue }`，保证 C 端 defaultValue 回退与业务后台一致。
+   - 旧契约 `variables[]`（`{ path, name, example, required }`）仅导入兼容读取，不再写出。
+2. **计算全在 `variableSchema.js` 纯函数**：对齐（`mergeVariableSchema`）、默认值（`applySchemaDefaults` 嵌套语义 / `applySchemaDefaultsFlat` 扁平映射表语义）、预览值预填（`applySchemaExamplesFlat`）、C 端 schema 解析优先级（`resolveRenderSchema`：显式注入 > 模板快照，不 merge）、类型推断（`inferVariableType`）、定义校验（`validateVariableDef`）。编辑器预览与 C 端渲染共用同一实现。**C 端不做任何校验**。
+3. **导入仅禁删**：`adapter.list()` / `api.setVariableSchema` / 快照 `src:'imported'` 的变量标记为 imported（`_schemaImportedPaths`），UI 与插件层仅限制删除（`removeCustomVariable` 拒绝），编辑/预览值/默认值与自定义变量权限一致；编辑器内新建的是自定义变量，随快照持久化可跨会话存活，业务 `adapter.save` 吸收后下次注入成为权威（adapter 拉取按 path 覆盖快照，业务权威优先）。
+4. **两个值的语义边界**（example ≙ testData 同义，均为测试数据——预设或修改后）：`example`=测试数据的持久化形态（快照写出优先级：testData 已填值**含空串** > 业务预设 > `''`；schema 注入/收编/快照还原时预填 testData 缺失 key）；`defaultValue`=渲染缺失回退（预览与 C 端渲染共用，精简导出唯一保留字段）。
+5. **默认值语义两端一致**：缺失判定 = `getValueByPath` 为 `undefined/null`（先精确匹配顶层扁平 key，再点路径下钻）；空串视为已提供，不覆盖；编辑器 `testData` 走扁平写入（`applySchemaDefaultsFlat`），C 端 `data` 走嵌套写入（`applySchemaDefaults`）。
+
+### 10.3 注入面
+
+| 渠道 | 用法 |
+| --- | --- |
+| adapter（推荐） | `FabricEditor` props `adapters.variable`（与 font/size 同构，registry key `variable`）；ready 时绑定到 `VariablePlugin`，**懒加载**（首次 `ensureSchemaLoaded()` 才拉取） |
+| api 静态注入 | `api.setVariableSchema(defs)` / `api.getVariableSchema()`（无接口场景，视为导入，不可删除） |
+| 渲染端 | `FabricRenderer` props `schema`（或 `options.schema`）：渲染前 `applySchemaDefaults` 默认值回退；**未注入时回读模板自带 `variableMeta.schema`**（`resolveRenderSchema`），完整/精简导出均自包含可渲染 |
+
+### 10.4 UI 与联动
+
+- `VariableConfigModal`：① 包裹符 ② **变量表单表**（定义展示 + 预览值填写一体）——
+  列：变量(label+path) / 类型 / 默认值（仅展示，编辑入口在新建/编辑表单） / 预览值(绑 testData，≙ form.example 同源) / 操作（icon 化；使用状态不用列展示：未使用行浅底色示意）；
+  行分三种：导入（可编辑、无删除）/ 自定义（编辑·删除）/ 未定义（红色 path，收编）；
+  表下动作：新建变量 / **批量创建** / 保存（adapter.save）或导出 JSON；预览/还原与关闭合并至 Modal footer。
+  **批量创建**：每行一条 `path` 或 `path,名称` 或 `path,名称,预览值`（逗号/｜/Tab 分隔，第 3 段起合并为预览值并预填 def.example + testData），或直接粘贴 `exportVariableSchema` 导出的 JSON（裸数组 / variableMeta `{schema:[...]}` 形状，def 全字段随行携带、各自类型生效）；统一类型 + 实时解析预览（汇总「可创建 n · 重复跳过 m」）+ 冲突跳过；
+  打开时预载画布未定义变量行（label 留空回退为 path），一次填完即「一键收编全部」。
+  未注入 schema 时表格展示画布扫描行（等价旧测试数据表）+ 引导文案（预览能力零损失）。
+- **开发者后门（仅开发联调）**：`VariablePlugin.setSchemaEditable(true)` / `api.setSchemaEditable(true)` 跳过 imported 只读限制（导入变量可删除），`false` 恢复只读；`FabricEditor` ready 时按 `?varEdit=1` 或 `localStorage['fe:variable-editable'] === '1'` 自动解锁。开关仅改权限判定、不重建 `_schemaImportedPaths`，可逆；但解锁后 `saveVariableSchema` 仍会全量覆盖后端，慎用。
+- `VariableInsertPopover`：Input append 触发器 + 搜索 + 类型严格过滤（文本入口只列 text、图片入口只列 image、二维码/条形码入口各列自身类型）；组件**只负责展示与选择**，写入由接入方完成。可用性判断在**接入点 append 槽位级守卫**（`varSchemaAvailable`，避免空 append 盒），接入点：`AttributeTextContent`（文本）、`AttributeOnlineImg` / `ImagePickerModal`（图片 URL，光标插入支持模板串）、`AttributeQrCode`（二维码内容）、`AttributeBarcode`（条形码代码，插入即经 setBarcode/setQrCode 同步画布）。
+- 事件：`variable:schemaChange`（schema 变更统一出口：先 `example` 预填 testData，预览态下再补默认值并重刷预览）。
+- `useTestData` 透出：`schema` / `schemaLoading` / `schemaAvailable` / `ensureSchemaLoaded` / `addCustomVariable` / `updateCustomVariable` / `removeCustomVariable` / `saveSchema` / `exportSchema` / `isImportedVariable`。
+
+### 10.5 验证
+
+- `variableSchema.test.js`：纯函数（对齐/默认值/示例预填/渲染 schema 优先级/推断/清洗）。
+- `variableSchemaPlugin.test.js`：插件契约（注入/懒加载/并发去重/失败重试/CRUD 权限/保存导出/画布扫描/example 预填/variableMeta 快照双形状与导入还原/预览联动）。
+- `exportPipeline.test.js`：双模式导出（精简态 defaultValue 回退项 / 完整态全量快照）。
+- `renderer.test.js`「变量表 schema 渲染容错」：默认值回退 + 未传 schema 零开销。
+- `editorApiVariable.test.js`：api 层签名透传。
+
+---
+
 ## 11. 开发约束与检查清单
 
 ### 11.1 新增渲染能力（新图层类型渲染、特效等）
@@ -293,6 +353,7 @@ render()
 - [ ] 导出倍数：渲染器高清导出用 `core.getPlugin('ServersPlugin').preview(2)`。
 - [ ] 插件注册注意 `pluginName` 唯一、渲染插件前缀 `Renderer`。
 - [ ] 出口文件：用到渲染包则在 `src/lib/renderer.js` 导出，测试是否影响 tree-shaking。
+- [ ] 变量表（schema）相关：会话态权威在业务后台（adapter/api 注入）与 `VariablePlugin` 内存；模板 JSON 只允许 `variableMeta.schema` **快照**（保存时派生，见 §10.2），**禁止把 schema 塞进 jsonOptimizer 对称链**；schema 计算一律走 `variableSchema.js` 纯函数。
 
 ### 11.2 新增编辑能力 / 宿主适配（运行时层）
 
@@ -320,6 +381,7 @@ npm run build:lib:renderer      # 渲染包
 
 - `renderer.test.js` 用 `createRenderer()` + `wsPlugin(core)` / `autoGrowPlugin(core)` 助手，断言走插件公开方法，不触碰内部状态。
 - `pluginEngine.test.js` 校验基类契约（hooks 创建/绑定/清理、`Editor` 与 `RendererCore` 继承关系）。
+- `variableSchema.test.js` / `variableSchemaPlugin.test.js` 校验变量表纯函数与 `VariablePlugin` 扩展契约。
 - `runtimeFacade.test.js` 校验单实例门面（回退 / 注入 / 幂等 / 互操作解包 / `onRuntimeReady` 时序）。
 - `canvasAsset.test.js` / `assetsCore.test.js` 校验素材解析与 loader 共享核心（含幂等）。
 - CSS / `qr-code-styling` 等在 node 环境需 `jest.mock(..., { virtual: true })` 兜底，参考已有测试头部。

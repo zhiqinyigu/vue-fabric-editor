@@ -6,17 +6,18 @@
  * - usePosterEntry：值字符串 → 解析状态派生（parsed / hasValue / hasVariables）
  */
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from '@vue/composition-api';
+import { extractVariables } from '@/core/variableEngine';
 
 /** 从画布 JSON 中找 workspace 节点 */
 export function findWorkspace(json) {
   return json && json.objects ? json.objects.find((o) => o && o.id === 'workspace') : null;
 }
 
-/** 解析结果 → 状态派生（hasValue：有画布数据；hasVariables：含变量），卡片与舞台共用 */
-export function getPosterStatus(parsed) {
+/** 解析结果 → 状态派生（hasValue：有画布数据；hasVariables：含变量），usePosterEntry 内部使用 */
+function getPosterStatus(parsed) {
   const hasValue = !!(parsed && Array.isArray(parsed.objects) && parsed.objects.length);
-  const meta = parsed && parsed.variableMeta;
-  const hasVariables = !!(meta && Array.isArray(meta.variables) && meta.variables.length);
+  // 变量从画布占位符扫描得出（variableMeta 不再保证携带变量清单）
+  const hasVariables = !!hasValue && extractVariables(parsed).length > 0;
   return { hasValue, hasVariables };
 }
 

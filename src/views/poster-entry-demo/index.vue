@@ -29,6 +29,7 @@
             :sample-data="legacySampleData"
             :scope-keys="legacyScopeKeys"
             :adapters="adapters"
+            :variable-context="legacyVariableContext"
             @input="(v) => (legacyValue = v)"
           />
         </Col>
@@ -98,8 +99,9 @@ function makeSamplePoster(width, height, title) {
       },
     ],
     variableMeta: {
+      version: 1,
       delimiter: { start: '{{', end: '}}' },
-      variables: [{ path: 'title', example: title }],
+      schema: [{ path: 'title', label: '标题', type: 'text', example: title }],
     },
   };
 }
@@ -148,6 +150,9 @@ export default {
       legacyText: JSON.stringify(legacySharePoster, null, 2),
       legacyError: '',
       legacyField: { key: 'courseSharePosterConfig', title: '讨论区分享海报' },
+      // 变量表存储键（demo）：经交接 query 传编辑器页注入 KV 适配器（localStorage 模拟），
+      // 并驱动卡片预览示例值拉取（后台变量表 example 覆盖内嵌快照）
+      legacyVariableContext: { pagePath: 'poster-entry-demo', keyStr: 'courseSharePosterConfig' },
       // 变量名列表（旧格式转换时保留 {{key}} 语义；真实业务取 variableDescription 的 name 集合）
       legacyScopeKeys: [
         'nickname',

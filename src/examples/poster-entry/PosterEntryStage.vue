@@ -4,8 +4,9 @@
     <div class="pes-wrap">
       <PosterPreview
         :json="previewJson || parsed"
-        :data="sampleData"
+        :data="previewData"
         :adapters="adapters"
+        :options="previewOptions"
         :height="previewHeight"
         :post-render="postRender"
         :error="previewError"
@@ -29,8 +30,12 @@
         </template>
       </PosterPreview>
 
-      <!-- 浮层仅已配置时出现：查看（大号圆形主按钮），删除收敛在弹窗内 -->
+      <!-- 浮层仅已配置时出现：示例/原样切换（左上悬浮）+ 查看（大号圆形主按钮），删除收敛在弹窗内 -->
       <div v-if="hasValue" class="pes-overlay">
+        <div v-if="!pureSampleData" class="pes-mode" @click.stop>
+          <span class="pes-mode-text">{{ sampleMode ? '示例预览' : '原样展示' }}</span>
+          <iSwitch v-model="sampleMode" />
+        </div>
         <Button
           class="pes-main"
           size="large"
@@ -54,8 +59,11 @@
       :preview-warning="previewWarning"
       :validate="validate"
       :adapters="adapters"
-      :sample-data="sampleData"
+      :preview-data="previewData"
+      :preview-options="previewOptions"
       :transform="transform"
+      :sample-mode.sync="sampleMode"
+      :pure-sample-data="pureSampleData"
       :post-render="postRender"
       :readonly="readonly"
       :deletable="deletable"
@@ -78,7 +86,8 @@ import { usePosterEntry } from './usePosterEntry';
 /**
  * 海报预览交互舞台（UI 中性，与业务外壳解耦，可独立使用）
  * - 预览画框（PosterPreview）：已配置渲染海报，空态提供「配置海报」引导
- * - 悬停浮层：已配置 hover 显示「查看」，打开双模式弹窗
+ * - 悬停浮层：已配置 hover 显示「查看」与示例/原样切换（状态由舞台持有，弹窗内联动），
+ *   打开双模式弹窗
  * - 查看/配置双模式弹窗（PosterViewModal）：预览大图 ↔ JSON 输入，
  *   复制导出/跳编辑页/删除收敛在内
  * - 值变更内聚：应用（弹窗确认）/删除（二次确认）后 emit('input', 新值字符串) 并提示；
@@ -119,6 +128,8 @@ export default {
     previewWarning: { type: String, default: '' },
     adapters: { type: Object, default: () => ({}) },
     sampleData: { type: Object, default: () => ({}) },
+    // 纯用户数据场景：预览恒按业务 sampleData 渲染，隐藏示例/原样开关（透传 PosterViewModal）
+    pureSampleData: { type: Boolean, default: false },
     transform: { type: Function, default: null },
     previewHeight: { type: Number, default: 260 },
     // 只读预览：隐藏配置/删除等编辑入口，仅可查看（hover「查看」保留）
@@ -158,6 +169,22 @@ export default {
 
     const visible = ref(false);
 
+    // 示例/原样切换（对应编辑器「快速预览/原样展示」二态）。状态与派生均为舞台单点，
+    // 卡片与弹窗大图共用，弹窗内开关经 sample-mode.sync 回写；JSON 输入的待应用预览固定原样
+    const sampleMode = ref(true);
+    // 示例模式：严格按外部 sampleData 渲染（缺值字段的构造由外部负责，空字段走渲染器原生语义）；
+    // 原样模式：不注入任何数据，交由 FabricRenderer 模板模式渲染（未解析变量与编辑器画布同表现）
+    const previewData = computed(() => {
+      // 纯用户数据场景：恒按业务 sampleData 渲染（开关已隐藏，防状态残留）
+      if (props.pureSampleData) return props.sampleData;
+      return sampleMode.value ? props.sampleData : null;
+    });
+    // 原样模式 = FabricRenderer 模板模式（token 原样保留 → 变量图/变量背景占位、文本字面量、
+    // QR 为字面量内容的码，与编辑器画布一致）；示例模式与纯用户数据场景关闭（走替换后的原始渲染）
+    const previewOptions = computed(() => ({
+      templateMode: !props.pureSampleData && !sampleMode.value,
+    }));
+
     const onPreviewError = () => {
       Message.error(`「${props.field.title}」预览渲染失败，请检查 JSON 与图片地址`);
     };
@@ -179,7 +206,18 @@ export default {
       });
     };
 
-    return { parsed, hasValue, previewJson, visible, onPreviewError, onApplied, onClear };
+    return {
+      parsed,
+      hasValue,
+      previewJson,
+      visible,
+      sampleMode,
+      previewData,
+      previewOptions,
+      onPreviewError,
+      onApplied,
+      onClear,
+    };
   },
 };
 </script>
@@ -221,6 +259,24 @@ export default {
   &:hover .pes-overlay {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  // 示例/原样切换：左上悬浮（随浮层 hover 出现），深色底保证海报上的可读性
+  .pes-mode {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  .pes-mode-text {
+    font-size: 12px;
+    color: #fff;
   }
 
   .pes-main {

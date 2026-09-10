@@ -6,11 +6,14 @@ import {
   getCurrentInstance,
   onMounted,
   onBeforeUnmount,
+  nextTick,
 } from '@vue/composition-api';
 import useSelect from '@/hooks/select';
 import InputNumber from '@/components/inputNumber';
 import PathEditorDialog from './PathEditorDialog.vue';
+import VariableInsertPopover from './VariableInsertPopover.vue';
 import { refreshPathTextDims } from '@/core/objects/CustomIText';
+import { insertAtCursor, getInputElement, focusCaret } from '@/utils/cursorInsert';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import AttrField from '@/components/attrPanel/AttrField.vue';
 import AttrMultiField from '@/components/attrPanel/AttrMultiField.vue';
@@ -21,6 +24,7 @@ export default {
   components: {
     InputNumber,
     PathEditorDialog,
+    VariableInsertPopover,
     AttrSection,
     AttrField,
     AttrMultiField,
@@ -29,6 +33,11 @@ export default {
   setup() {
     const update = getCurrentInstance();
     const { fabric, canvasEditor, isOne, isMatchType } = useSelect(['i-text', 'textbox']);
+    // 变量表可用性：append 槽位级守卫（无 schema 时不渲染插入变量入口）。
+    // adapter 在编辑器初始化即绑定，属静态事实，本地 ref 即可（避免频繁重挂载累积监听器）
+    const varSchemaAvailable = ref(
+      !!(canvasEditor.getSchemaAdapter && canvasEditor.getSchemaAdapter())
+    );
     const showPathEditor = ref(false);
     const baseAttr = reactive({
       text: '',
@@ -76,6 +85,20 @@ export default {
         }
         canvasEditor.canvas.renderAll();
       }
+    };
+
+    // 插入变量占位符到文本光标处（从变量表选择，杜绝手打）；
+    // 包裹符动态取自 VariablePlugin，插入后走 changeCommon 同步画布（text:changed 契约联动 AutoGrow）
+    const textInput = ref(null);
+    const insertVariable = (path) => {
+      const vp = canvasEditor.getPlugin && canvasEditor.getPlugin('VariablePlugin');
+      const d = vp && vp.getDelimiter ? vp.getDelimiter() : { start: '{{', end: '}}' };
+      const token = `${d.start}${path}${d.end}`;
+      const el = getInputElement(textInput.value, 'input.ivu-input');
+      const { next, caret } = insertAtCursor(el, baseAttr.text, token);
+      baseAttr.text = next;
+      changeCommon('text', next);
+      nextTick(() => focusCaret(el, caret));
     };
     const selectCancel = () => {
       update && update.proxy && update.proxy.$forceUpdate();
@@ -180,7 +203,10 @@ export default {
       isMatchType,
       baseAttr,
       hasVariable,
+      varSchemaAvailable,
       changeCommon,
+      textInput,
+      insertVariable,
       showPathEditor,
       openPathEditor,
       onApplyFromEditor,
@@ -193,7 +219,15 @@ export default {
 <template>
   <AttrSection v-if="isOne && isMatchType" :title="$t('text_content')">
     <AttrField editable>
-      <Input v-model="baseAttr.text" @on-change="changeCommon('text', baseAttr.text)"></Input>
+      <Input
+        ref="textInput"
+        v-model="baseAttr.text"
+        @on-change="changeCommon('text', baseAttr.text)"
+      >
+        <template v-if="varSchemaAvailable" #append>
+          <VariableInsertPopover filter-type="text" @select="insertVariable" />
+        </template>
+      </Input>
     </AttrField>
 
     <div v-if="hasVariable" class="variable-tip" style="margin-top: 10px">

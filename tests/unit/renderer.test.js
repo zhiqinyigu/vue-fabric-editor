@@ -5,6 +5,7 @@
  */
 import { fabric } from 'fabric';
 import { renderObjects } from '../../src/core/variableEngine';
+import { applySchemaDefaults } from '../../src/core/variableSchema';
 
 // 二维码/条形码生成在 jsdom 不可用，mock 生成函数
 jest.mock('../../src/core/generators', () => ({
@@ -578,8 +579,9 @@ describe('RendererCore 真实海报 JSON（clipPath + 二维码 + 多图 + 变�
       scaleY: 1,
     },
     variableMeta: {
+      version: 1,
       delimiter: { start: '{{', end: '}}' },
-      variables: [{ path: 'content', name: 'content', example: '', required: false }],
+      schema: [{ path: 'content', label: '正文', type: 'text' }],
     },
   };
 
@@ -856,5 +858,298 @@ describe('RendererCore 变量背景（替换后按真实尺寸渲染 / 失败语
     expect(bg.get('width') * bg.get('scaleX')).toBeCloseTo(360, 4);
     expect(bg.get('height') * bg.get('scaleY')).toBeCloseTo(640, 4);
     mock.mockRestore();
+  });
+});
+
+describe('变量表 schema 渲染容错（FabricRenderer 渲染前置管线）', () => {
+  // 与 FabricRenderer.render 的前置步骤一致：默认值补齐 → 变量替换
+  const schema = [
+    {
+      path: 'course.name',
+      label: '课程名称',
+      type: 'text',
+      defaultValue: '默认课程',
+    },
+    {
+      path: 'lecturer.avatar',
+      label: '讲师头像',
+      type: 'image',
+      defaultValue: 'https://cdn.example.com/default.png',
+    },
+    { path: 'business.name', label: '店铺名称', type: 'text' },
+  ];
+
+  function renderPipeline(json, data, defs) {
+    const filled = applySchemaDefaults(data, defs);
+    return { filled, substituted: renderObjects(json, filled) };
+  }
+
+  it('未传 schema：数据原样渲染（零开销，行为与旧版一致）', () => {
+    const json = { objects: [{ type: 'textbox', text: '{{course.name}}' }] };
+    const out = renderObjects(json, { 'course.name': '真实课程' });
+    expect(out.objects[0].text).toBe('真实课程');
+  });
+
+  it('默认值回退：缺失 key 用 defaultValue 渲染，已有值不覆盖', () => {
+    const json = {
+      objects: [
+        { type: 'textbox', text: '{{course.name}}/{{business.name}}' },
+        { type: 'image', src: '{{lecturer.avatar}}' },
+      ],
+    };
+    // business.name 无默认值且无数据 → 渲染为空串（不依赖任何校验标记）
+    const { filled, substituted } = renderPipeline(json, {}, schema);
+    // applySchemaDefaults 按嵌套路径写入；renderObjects 取值兼容嵌套/扁平两种形态
+    expect(filled.course.name).toBe('默认课程');
+    expect(filled.lecturer.avatar).toBe('https://cdn.example.com/default.png');
+    expect(substituted.objects[0].text).toBe('默认课程/');
+    expect(substituted.objects[1].src).toBe('https://cdn.example.com/default.png');
+  });
+
+  it('已有真实数据：默认值不生效', () => {
+    const json = { objects: [{ type: 'textbox', text: '{{course.name}}' }] };
+    const { filled, substituted } = renderPipeline(
+      json,
+      { 'course.name': '真实课程', 'business.name': '真实店铺' },
+      schema
+    );
+    // 扁平 key 已提供值：不触发补齐，也不覆盖
+    expect(filled['course.name']).toBe('真实课程');
+    expect(substituted.objects[0].text).toBe('真实课程');
+  });
+});
+
+// 变量占位兜底（templateMode 自助注册，兼容旧名 variablePlaceholder；默认不启用）：
+// 触发判据仅"src 仍是变量字面量"，故数据模式（替换后 token 消失）天然不受影响；
+// 本组首个用例断言默认不注册的基线，之后用例会全局安装补丁（模块级幂等），
+// 组内用例顺序需保持（默认基线在前）
+describe('变量占位兜底（options.templateMode 注册）', () => {
+  function createRendererWithOptions(options) {
+    const el = document.createElement('canvas');
+    el.width = 300;
+    el.height = 400;
+    document.body.appendChild(el);
+    const canvas = new fabric.Canvas(el, { selection: false, skipTargetFind: true });
+    const core = new RendererCore(canvas, options);
+    return { canvas, core };
+  }
+
+  it('默认不注册：未解析变量 src 按原始行为加载失败丢对象（C 端基线不变）', async () => {
+    const { canvas, core } = createRenderer();
+    // 未填值变量 src 模拟真实环境（fabric.util.loadImage 对非法 URL 回调 isError）
+    const spy = jest.spyOn(fabric.util, 'loadImage').mockImplementation((url, cb, thisArg) => {
+      cb.call(thisArg, null, true);
+    });
+    await core.loadJSON(makeVariablePoster());
+    expect(canvas.getObjects().find((o) => o.id === 'legacy-avatar')).toBeUndefined();
+    expect(spy).toHaveBeenCalled();
+  });
+
+  function makeVariablePoster(withTiles = false) {
+    const objects = [
+      {
+        type: 'rect',
+        id: 'workspace',
+        left: 0,
+        top: 0,
+        width: 300,
+        height: 400,
+        fill: '#ffffff',
+        selectable: false,
+        hasControls: false,
+      },
+      {
+        // legacy 头像形态：变量 src + 版位标记（解合约等价 isVariableImage 分支）
+        type: 'image',
+        id: 'legacy-avatar',
+        src: '{{avatar}}',
+        left: 10,
+        top: 10,
+        width: 80,
+        height: 80,
+        legacyAvatar: { box: 80 },
+        selectable: false,
+        hasControls: false,
+      },
+    ];
+    if (withTiles) {
+      objects.push({
+        type: 'rect',
+        id: 'bg-tile',
+        left: 0,
+        top: 0,
+        width: 300,
+        height: 400,
+        fill: { type: 'pattern', source: '{{tileSrc}}', repeat: 'repeat' },
+        src: '{{tileSrc}}',
+      });
+    }
+    return { objects };
+  }
+
+  it('注册 + 无数据：变量图/legacy 头像显示占位（src 保留变量字面量，叠加层标注）', async () => {
+    const { canvas, core } = createRendererWithOptions({ variablePlaceholder: true });
+    mockLoadImage();
+    await core.loadJSON(makeVariablePoster());
+    const avatar = canvas.getObjects().find((o) => o.id === 'legacy-avatar');
+    expect(avatar).toBeTruthy();
+    // 变量字面量保留在 src（不写入占位图 dataURL，防序列化污染）
+    expect(avatar.get('src')).toBe('{{avatar}}');
+    expect(avatar.get('isVariableImage')).toBe(true);
+    expect(avatar.get('variableLabel')).toBe('avatar');
+    expect(avatar.get('showPlaceholderText')).toBe(true);
+  });
+
+  it('注册 + 变量背景 tile：rect 保留、pattern 源为占位图、src 标记变量 URL', async () => {
+    const { canvas, core } = createRendererWithOptions({ variablePlaceholder: true });
+    mockLoadImage();
+    await core.loadJSON(makeVariablePoster(true));
+    const bg = canvas.getObjects().find((o) => o.id === 'bg-tile');
+    expect(bg).toBeTruthy();
+    expect(bg.get('src')).toBe('{{tileSrc}}');
+    expect(bg.get('variableLabel')).toBe('tileSrc');
+    expect(bg.get('showPlaceholderText')).toBe(true);
+    // pattern 载入了合法占位图 element（非字符串残留）
+    expect(bg.fill && bg.fill.source).toBeTruthy();
+    expect(typeof bg.fill.source).not.toBe('string');
+  });
+
+  it('注册 + 有数据：变量被真实 URL 替换，按原始路径加载（正常回归）', async () => {
+    const { canvas, core } = createRendererWithOptions({ variablePlaceholder: true });
+    mockLoadImage();
+    const json = renderObjects(makeVariablePoster(), {
+      avatar: 'https://x/a.png',
+      tileSrc: 'https://x/t.png',
+    });
+    await core.loadJSON(json);
+    const avatar = canvas.getObjects().find((o) => o.id === 'legacy-avatar');
+    expect(avatar.get('src')).toBe('https://x/a.png');
+    expect(avatar.get('isVariableImage')).toBeUndefined();
+  });
+});
+
+describe('模板模式 / 数据模式：占位能力按实例隔离（无全局泄漏）', () => {
+  function posterWith(objs) {
+    return {
+      objects: [
+        { type: 'rect', id: 'workspace', left: 0, top: 0, width: 300, height: 400, fill: '#fff' },
+        ...objs,
+      ],
+    };
+  }
+  function makeRenderer(options) {
+    const el = document.createElement('canvas');
+    el.width = 300;
+    el.height = 400;
+    document.body.appendChild(el);
+    const canvas = new fabric.Canvas(el, { selection: false, skipTargetFind: true });
+    return { canvas, core: new RendererCore(canvas, options) };
+  }
+  const avatarObj = (extra = {}) => ({
+    type: 'image',
+    id: 'avatar',
+    src: '{{avatar}}',
+    left: 10,
+    top: 10,
+    width: 80,
+    height: 80,
+    ...extra,
+  });
+
+  it('模板模式：未替换 token → 变量图占位（src 保留字面量 + 叠加层标记）', async () => {
+    const spy = mockLoadImage();
+    try {
+      const { canvas, core } = makeRenderer({ templateMode: true });
+      await core.loadJSON(posterWith([avatarObj()]));
+      const img = canvas.getObjects().find((o) => o.id === 'avatar');
+      expect(img.get('src')).toBe('{{avatar}}');
+      expect(img.get('isVariableImage')).toBe(true);
+      expect(img.get('variableLabel')).toBe('avatar');
+      expect(img.get('showPlaceholderText')).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('模板模式：group 内变量图同样占位（不依赖回显数据构造）', async () => {
+    const spy = mockLoadImage();
+    try {
+      const { canvas, core } = makeRenderer({ templateMode: true });
+      await core.loadJSON(
+        posterWith([{ type: 'group', objects: [avatarObj({ id: 'g-avatar' })] }])
+      );
+      const grp = canvas.getObjects().find((o) => o.type === 'group');
+      const img = grp.getObjects().find((o) => o.id === 'g-avatar');
+      expect(img.get('isVariableImage')).toBe(true);
+      expect(img.get('src')).toBe('{{avatar}}');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('模板模式：tile 变量背景 → 占位 pattern + src 标记', async () => {
+    const spy = mockLoadImage();
+    try {
+      const { canvas, core } = makeRenderer({ templateMode: true });
+      await core.loadJSON(
+        posterWith([
+          {
+            type: 'rect',
+            id: 'backgroundImage',
+            left: 0,
+            top: 0,
+            width: 300,
+            height: 400,
+            backgroundImageMode: 'tile',
+            isVariableBackground: true,
+            src: '{{bg}}',
+            fill: { type: 'pattern', source: '{{bg}}', repeat: 'repeat' },
+          },
+        ])
+      );
+      const bg = canvas.getObjects().find((o) => o.id === 'backgroundImage');
+      expect(bg.get('src')).toBe('{{bg}}');
+      expect(bg.get('variableLabel')).toBe('bg');
+      expect(bg.get('showPlaceholderText')).toBe(true);
+      expect(typeof bg.fill.source).not.toBe('string');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('数据模式：已解析真 URL + isVariableImage 标记 → 真图不被劫持（补丁已安装也不影响）', async () => {
+    const spy = mockLoadImage();
+    try {
+      // 先渲染一次模板模式（安装全局占位补丁）
+      const a = makeRenderer({ templateMode: true });
+      await a.core.loadJSON(posterWith([avatarObj()]));
+      // 数据模式：真实 URL + 残留标记
+      const { canvas, core } = makeRenderer({});
+      await core.loadJSON(
+        posterWith([avatarObj({ src: 'https://x/real.png', isVariableImage: true })])
+      );
+      const img = canvas.getObjects().find((o) => o.id === 'avatar');
+      expect(img.get('src')).toBe('https://x/real.png');
+      expect(img._element.src).toBe('https://x/real.png');
+      expect(img.get('showPlaceholderText')).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('数据模式：标记 + 空 src → 元素丢弃（严格渲染器语义，补丁已安装也不占位）', async () => {
+    const spy = jest.spyOn(fabric.util, 'loadImage').mockImplementation((url, cb, thisArg) => {
+      const el = document.createElement('img');
+      cb.call(thisArg, el, true);
+    });
+    try {
+      const a = makeRenderer({ templateMode: true });
+      await a.core.loadJSON(posterWith([avatarObj()]));
+      const { canvas, core } = makeRenderer({});
+      await core.loadJSON(posterWith([avatarObj({ src: '', isVariableImage: true })]));
+      expect(canvas.getObjects().find((o) => o.id === 'avatar')).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

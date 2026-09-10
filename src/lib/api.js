@@ -46,5 +46,25 @@ export function createEditorApi(ctx) {
     emit: (event, payload) => editor.emit(event, payload),
     // ---- 插件 ----
     getPlugin: (name) => editor.getPlugin(name),
+    // ---- 变量表（schema，业务无关注入/消费面）----
+    // 直接注入静态变量表（无 adapter 场景）；视为导入（只读）
+    setVariableSchema: (defs) => editor.setVariableSchema(defs),
+    getVariableSchema: () => editor.getVariableSchema(),
+    // 懒加载（adapter 场景）：幂等；失败 reject 由调用方降级
+    ensureVariableSchemaLoaded: () => editor.ensureSchemaLoaded(),
+    // 自定义变量 CRUD（导入变量只读）
+    addCustomVariable: (def) => editor.addCustomVariable(def),
+    updateCustomVariable: (path, patch) => editor.updateCustomVariable(path, patch),
+    removeCustomVariable: (path) => editor.removeCustomVariable(path),
+    isImportedVariable: (path) => editor.isImportedVariable(path),
+    // 开发者后门：解锁/恢复 imported 变量的删除限制（默认仅开发联调使用）
+    setSchemaEditable: (editable = true) => editor.setSchemaEditable(editable),
+    isSchemaEditable: () => editor.isSchemaEditable(),
+    // 保存到业务后台（adapter.save；未实现时 reject，改走导出）
+    saveVariableSchema: () => editor.saveVariableSchema(),
+    // 导出变量表 JSON 字符串（交开发录入后台的对接兜底）
+    exportVariableSchema: () => editor.exportVariableSchema(),
+    // 画布扫描 [{ path, fields }]（对齐视图 / 收编数据源）
+    getVariableEntries: () => editor.getVariableEntries(),
   };
 }

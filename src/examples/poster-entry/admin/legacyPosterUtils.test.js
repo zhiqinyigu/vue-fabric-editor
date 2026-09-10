@@ -4,10 +4,14 @@
  *
  * 重点回归：
  * - 点路径变量（如 {course.trainStage.stageIndex}）：旧引擎经 parseExp 按点路径取值，
- *   曾因 VAR_IDENT_REG 只认扁平标识符被漏掉 —— 预览无占位、未传 scopeKeys 时不转 {{}}
+ *   变量名须整段收集（每段须为合法标识符），否则预览无占位、未传 scopeKeys 时不转 {{}}
  * - 占位构建语义：扁平平铺、路径嵌套（平铺点 key 会以渲染器 exact-key-first
- *   遮蔽业务方嵌套对象真值，见 setPathPlaceholder 注释）
- * - 图片变量一律不填（静态固化语义）、表达式/噪声 token 排除
+ *   遮蔽业务方嵌套对象真值，见 setPathValue 注释）
+ * - 图片变量：schema/后台变量表有 example（图片 URL）时注入预览；无 example 有 defaultValue
+ *   时用 defaultValue；两者皆无则以默认纯色图兜底（不再丢图）；同名 key 同时用于文本仍不填
+ *   （同路径单值）；表达式/噪声 token 排除
+ * - 二维码/条形码内容变量（extension.data/value）：example > defaultValue > `{key}`（示例模式
+ *   生成占位码，否则内容被清空 → 生成端报错 → 元素被丢弃）
  */
 import { fabric } from 'fabric';
 import {
@@ -17,6 +21,7 @@ import {
   extractLegacyVarKeys,
   deriveFallbackSampleData,
 } from './legacyPosterUtils';
+import { makeVariablePlaceholderDataUrl } from '@/core/variablePlaceholder';
 
 // 桥接：转换器默认加载器走 loadImageResilient，桥回 fabric.util.loadImage（测试经该
 // spy mock 图片加载），并保留其"失败去 crossOrigin 重试"的回退语义，其余导出原样透传
@@ -43,6 +48,9 @@ jest.mock('@/core/imageLoader', () => {
     },
   };
 });
+
+// 默认图片示例（无 example/defaultValue 的图片变量）：纯色底 data URL
+const DEFAULT_IMG = expect.stringMatching(/^data:image\//);
 
 // 与渲染器 getValueByPath 同语义（先精确 key 后逐级路径），模拟合并后的取值结果
 function getPathValue(obj, path) {
@@ -146,11 +154,16 @@ describe('convertLegacyToStandard：值 → 标准 JSON 字符串', () => {
     expect(json.objects[0]).toMatchObject({ id: 'workspace', width: 1080, height: 1440 });
     const text = json.objects.find((o) => o.id === 'legacy-text-0');
     expect(text.text).toBe('{{courseName}}');
-    // data 未提供值 → 变量图语义保留（业务标记；不带 lib 的 isVariableImage——
-    // 标准变量图归渲染引擎布局，业务对象由业务 postRender 自治）
+    // data 未提供值 → 标准变量图（{{key}} + isVariableImage）：
+    // 编辑器变量预览与渲染端 variableImageFit 两端原生"按版位拉伸铺满"，无业务标记
     const img = json.objects.find((o) => o.id === 'legacy-img-0');
-    expect(img).toMatchObject({ src: '{{bookshelfImage}}', legacyVariableImg: { w: 40, h: 50 } });
-    expect(img.isVariableImage).toBeUndefined();
+    expect(img).toMatchObject({
+      src: '{{bookshelfImage}}',
+      isVariableImage: true,
+      width: 40,
+      height: 50,
+    });
+    expect(img.legacyVariableImg).toBeUndefined();
   });
 
   it('未传 scopeKeys：自动扫描变量名兜底，转换结果一致', async () => {
@@ -165,8 +178,13 @@ describe('convertLegacyToStandard：值 → 标准 JSON 字符串', () => {
     const text = json.objects.find((o) => o.id === 'legacy-text-0');
     expect(text.text).toBe('{{courseName}}');
     const img = json.objects.find((o) => o.id === 'legacy-img-0');
-    expect(img).toMatchObject({ src: '{{bookshelfImage}}', legacyVariableImg: { w: 40, h: 50 } });
-    expect(img.isVariableImage).toBeUndefined();
+    expect(img).toMatchObject({
+      src: '{{bookshelfImage}}',
+      isVariableImage: true,
+      width: 40,
+      height: 50,
+    });
+    expect(img.legacyVariableImg).toBeUndefined();
   });
 
   it('forEditor：旧格式转换结果剥离渲染锁（递归 group），workspace 保留', async () => {
@@ -329,13 +347,16 @@ describe('extractLegacyVarKeys：旧数据变量名自动提取', () => {
 });
 
 describe('deriveFallbackSampleData：sampleData 自动兜底', () => {
-  it('文本变量填 {key}，图片变量不填', () => {
+  it('文本变量填 {key}，图片变量以默认纯色图兜底', () => {
     const legacy = {
       background: 'https://x/bg.png',
       text: [{ text: '{nickname}发布' }],
       img: [{ src: '{bookshelfImage}' }],
     };
-    expect(deriveFallbackSampleData(legacy)).toEqual({ nickname: '{nickname}' });
+    expect(deriveFallbackSampleData(legacy)).toEqual({
+      nickname: '{nickname}',
+      bookshelfImage: DEFAULT_IMG,
+    });
   });
 
   it('中文文本变量同样兜底填 {key}', () => {
@@ -358,7 +379,7 @@ describe('deriveFallbackSampleData：sampleData 自动兜底', () => {
     expect(deriveFallbackSampleData(legacy)).toEqual({});
   });
 
-  it('jsonList：obj.text 填、obj.src 不填', () => {
+  it('jsonList：obj.text 填、obj.src 以默认纯色图兜底', () => {
     const legacy = {
       background: 'https://x/bg.png',
       jsonList: [
@@ -366,7 +387,10 @@ describe('deriveFallbackSampleData：sampleData 自动兜底', () => {
         { json: JSON.stringify({ type: 'image', src: '{qrcode}' }) },
       ],
     };
-    expect(deriveFallbackSampleData(legacy)).toEqual({ periodName: '{periodName}' });
+    expect(deriveFallbackSampleData(legacy)).toEqual({
+      periodName: '{periodName}',
+      qrcode: DEFAULT_IMG,
+    });
   });
 
   it('JSON 字符串入参 / 非法 JSON / 空值', () => {
@@ -378,7 +402,7 @@ describe('deriveFallbackSampleData：sampleData 自动兜底', () => {
     expect(deriveFallbackSampleData('')).toEqual({});
   });
 
-  it('标准 fabric JSON（编辑器保存回传后）：text 的 {{key}} 填，isVariableImage 不填', () => {
+  it('标准 fabric JSON（编辑器保存回传后）：text 的 {{key}} 填，图片变量默认纯色图', () => {
     const standard = {
       objects: [
         { type: 'textbox', text: '{{nickname}}发布了{{courseName}}' },
@@ -388,6 +412,7 @@ describe('deriveFallbackSampleData：sampleData 自动兜底', () => {
     expect(deriveFallbackSampleData(standard)).toEqual({
       nickname: '{nickname}',
       courseName: '{courseName}',
+      bookshelfImage: DEFAULT_IMG,
     });
   });
 
@@ -401,7 +426,7 @@ describe('deriveFallbackSampleData：sampleData 自动兜底', () => {
     expect(deriveFallbackSampleData(standard)).toEqual({});
   });
 
-  it('标准 objects：双花括号路径变量同样嵌套占位；变量图不填', () => {
+  it('标准 objects：双花括号路径变量同样嵌套；文本占位、图片路径默认纯色图', () => {
     const config = {
       objects: [
         { type: 'i-text', text: '第 {{course.trainStage.stageIndex}} 期 · {{name}}' },
@@ -410,12 +435,15 @@ describe('deriveFallbackSampleData：sampleData 自动兜底', () => {
     };
     const data = deriveFallbackSampleData(config);
     expect(data.name).toBe('{name}');
-    expect(data.course).toEqual({ trainStage: { stageIndex: '{course.trainStage.stageIndex}' } });
-    // 图片路径变量不参与占位构建（保持变量图分支）
-    expect(getPathValue(data, 'course.cover')).toBeUndefined();
+    expect(data.course).toEqual({
+      trainStage: { stageIndex: '{course.trainStage.stageIndex}' },
+      cover: DEFAULT_IMG,
+    });
+    // 图片路径变量以默认纯色图兜底（不再缺图）
+    expect(getPathValue(data, 'course.cover')).toEqual(DEFAULT_IMG);
   });
 
-  it('点路径变量嵌套写入：扁平/路径并存，图片路径变量不填，同根冲突路径优先', () => {
+  it('点路径变量嵌套写入：扁平/路径并存，文本占位、图片路径默认纯色图，同根冲突路径优先', () => {
     const config = {
       background: 'https://x/bg.png',
       text: [
@@ -427,10 +455,13 @@ describe('deriveFallbackSampleData：sampleData 自动兜底', () => {
     };
     const data = deriveFallbackSampleData(config);
     expect(data.name).toBe('{name}');
-    expect(data.course).toEqual({ trainStage: { stageIndex: '{course.trainStage.stageIndex}' } });
+    expect(data.course).toEqual({
+      trainStage: { stageIndex: '{course.trainStage.stageIndex}' },
+      cover: DEFAULT_IMG,
+    });
     expect(data.consultForm).toEqual({ startDateYear: '{consultForm.startDateYear}' });
-    // 图片路径变量不参与占位构建（保持变量图分支）
-    expect(getPathValue(data, 'course.cover')).toBeUndefined();
+    // 图片路径变量以默认纯色图兜底（不再缺图）
+    expect(getPathValue(data, 'course.cover')).toEqual(DEFAULT_IMG);
   });
 
   it('与业务 sampleData 顶层浅合并：嵌套对象/平铺点 key 真值均不被占位遮蔽', () => {
@@ -462,7 +493,7 @@ describe('deriveFallbackSampleData：sampleData 自动兜底', () => {
     );
   });
 
-  it('variableMeta.schema 示例值：优先于 {key} 占位（数字归一/空示例跳过/图片变量不填）', () => {
+  it('variableMeta.schema 示例值：优先于 {key} 占位（数字归一/空示例跳过/图片变量注入预览）', () => {
     const config = {
       objects: [
         {
@@ -503,11 +534,170 @@ describe('deriveFallbackSampleData：sampleData 自动兜底', () => {
     };
     const data = deriveFallbackSampleData(config);
     expect(data.name).toBe('方方方');
-    expect(data.course).toEqual({ trainStage: { stageIndex: '20' } });
+    // schema 有示例的图片路径变量同样按 setPathValue 嵌套写入（与文本路径变量同根共存）
+    expect(data.course).toEqual({ trainStage: { stageIndex: '20' }, cover: 'http://x/c.png' });
     expect(data.noExample).toBe('{noExample}');
     expect(data.emptyExample).toBe('{emptyExample}');
-    // schema 有示例的图片变量仍不填（保持变量图分支）
-    expect(getPathValue(data, 'course.cover')).toBeUndefined();
+    // schema 有示例的图片变量 → 注入预览渲染示例图
+    expect(getPathValue(data, 'course.cover')).toBe('http://x/c.png');
+  });
+
+  it('图片变量：schema 有 example 则注入预览（平铺 + 嵌套路径）', () => {
+    const config = {
+      objects: [
+        { type: 'image', isVariableImage: true, src: '{{cover}}' },
+        { type: 'image', isVariableImage: true, src: '{{course.cover}}' },
+      ],
+      variableMeta: {
+        schema: [
+          { path: 'cover', label: 'cover', type: 'image', example: 'http://x/cover.png' },
+          { path: 'course.cover', label: 'course.cover', type: 'image', example: 'http://x/c.png' },
+        ],
+      },
+    };
+    const data = deriveFallbackSampleData(config);
+    expect(data.cover).toBe('http://x/cover.png');
+    expect(getPathValue(data, 'course.cover')).toBe('http://x/c.png');
+  });
+
+  it('图片变量：无 example 以默认纯色图兜底；同名 key 同时用于文本仍不填（同路径单值）', () => {
+    const config = {
+      objects: [
+        { type: 'image', isVariableImage: true, src: '{{noExample}}' },
+        { type: 'i-text', text: '{{shared}}' },
+        { type: 'image', isVariableImage: true, src: '{{shared}}' },
+      ],
+      variableMeta: {
+        schema: [{ path: 'shared', label: 'shared', type: 'image', example: 'http://x/s.png' }],
+      },
+    };
+    const data = deriveFallbackSampleData(config);
+    expect(getPathValue(data, 'noExample')).toEqual(DEFAULT_IMG);
+    expect(getPathValue(data, 'shared')).toBeUndefined();
+  });
+
+  it('图片变量：有 defaultValue 无 example 用 defaultValue（不被默认纯色图遮蔽）', () => {
+    const config = {
+      objects: [
+        { type: 'image', isVariableImage: true, src: '{{cover}}' },
+        { type: 'image', isVariableImage: true, src: '{{course.cover}}' },
+      ],
+      variableMeta: {
+        schema: [
+          {
+            path: 'cover',
+            label: 'cover',
+            type: 'image',
+            defaultValue: 'http://x/default-cover.png',
+          },
+          {
+            path: 'course.cover',
+            label: 'course.cover',
+            type: 'image',
+            defaultValue: 'http://x/default-c.png',
+          },
+        ],
+      },
+    };
+    const data = deriveFallbackSampleData(config);
+    expect(data.cover).toBe('http://x/default-cover.png');
+    expect(getPathValue(data, 'course.cover')).toBe('http://x/default-c.png');
+    // example 优先于 defaultValue
+    const withExample = deriveFallbackSampleData({
+      ...config,
+      variableMeta: {
+        schema: [
+          {
+            path: 'cover',
+            label: 'cover',
+            type: 'image',
+            example: 'http://x/e.png',
+            defaultValue: 'http://x/d.png',
+          },
+        ],
+      },
+    });
+    expect(withExample.cover).toBe('http://x/e.png');
+  });
+
+  it('后台变量表 defaultValue：同 path 覆盖内嵌快照（图片变量）', () => {
+    const config = {
+      objects: [{ type: 'image', isVariableImage: true, src: '{{cover}}' }],
+      variableMeta: {
+        schema: [
+          { path: 'cover', label: 'cover', type: 'image', defaultValue: 'http://x/embedded.png' },
+        ],
+      },
+    };
+    const data = deriveFallbackSampleData(config, [
+      { path: 'cover', label: 'cover', type: 'image', defaultValue: 'http://x/remote.png' },
+    ]);
+    expect(data.cover).toBe('http://x/remote.png');
+  });
+
+  it('多个图片变量共用同一张默认纯色图（模块内缓存，值一致）', () => {
+    const config = {
+      objects: [
+        { type: 'image', isVariableImage: true, src: '{{a}}' },
+        { type: 'image', isVariableImage: true, src: '{{b}}' },
+      ],
+    };
+    const data = deriveFallbackSampleData(config);
+    expect(data.a).toEqual(DEFAULT_IMG);
+    expect(data.a).toBe(data.b);
+  });
+
+  it('二维码 extension.data 内容变量缺值填 {key}（示例模式生成占位码，不再丢码）', () => {
+    const config = {
+      objects: [
+        {
+          type: 'image',
+          id: 'legacy-qrcode',
+          extensionType: 'qrcode',
+          extension: { data: '{{$posterShareUrl}}', width: 216 },
+        },
+      ],
+    };
+    expect(deriveFallbackSampleData(config)).toEqual({ $posterShareUrl: '{$posterShareUrl}' });
+  });
+
+  it('条形码 extension.value 内容变量缺值填 {key}', () => {
+    const config = {
+      objects: [
+        {
+          type: 'image',
+          extensionType: 'barcode',
+          extension: { value: '{{code}}', width: 200 },
+        },
+      ],
+    };
+    expect(deriveFallbackSampleData(config)).toEqual({ code: '{code}' });
+  });
+
+  it('二维码内容变量：schema example > defaultValue > {key}（defaultValue 不被占位遮蔽）', () => {
+    const base = {
+      objects: [
+        { type: 'image', extensionType: 'qrcode', extension: { data: '{{$posterShareUrl}}' } },
+      ],
+    };
+    // 有 example → 用 example
+    expect(
+      deriveFallbackSampleData({
+        ...base,
+        variableMeta: {
+          schema: [{ path: '$posterShareUrl', type: 'qrcode', example: 'https://x/e' }],
+        },
+      }).$posterShareUrl
+    ).toBe('https://x/e');
+    // 无 example 有 defaultValue → 用 defaultValue（否则 {key} 会遮蔽 applySchemaDefaults 回退）
+    expect(
+      deriveFallbackSampleData({
+        ...base,
+        variableMeta: {
+          schema: [{ path: '$posterShareUrl', type: 'qrcode', defaultValue: 'https://x/d' }],
+        },
+      }).$posterShareUrl
+    ).toBe('https://x/d');
   });
 
   it('旧格式配置也可读 variableMeta.schema 示例值', () => {
@@ -532,5 +722,58 @@ describe('deriveFallbackSampleData：sampleData 自动兜底', () => {
     const merged = { ...deriveFallbackSampleData(config), name: '放冰箱' };
     expect(getPathValue(merged, 'name')).toBe('放冰箱');
     expect(getPathValue(merged, 'course.trainStage.stageIndex')).toBe('20');
+  });
+
+  it('后台变量表 remoteSchemaDefs：同 path 覆盖内嵌快照 example（后台权威，多人协同）', () => {
+    const config = {
+      objects: [
+        {
+          type: 'i-text',
+          text: '{{name}} {{course.trainStage.stageIndex}} {{onlyRemote}} {{blank}}',
+        },
+      ],
+      variableMeta: { schema: [{ path: 'name', label: 'name', type: 'text', example: '方方方' }] },
+    };
+    const remoteDefs = [
+      { path: 'name', label: 'name', type: 'text', example: '协同后' },
+      { path: 'course.trainStage.stageIndex', label: 'stageIndex', type: 'text', example: 3 },
+      { path: 'onlyRemote', label: 'onlyRemote', type: 'text', example: '后台新增' },
+      { path: 'blank', label: 'blank', type: 'text', example: '' },
+    ];
+    const data = deriveFallbackSampleData(config, remoteDefs);
+    expect(data.name).toBe('协同后');
+    expect(data.course).toEqual({ trainStage: { stageIndex: '3' } });
+    expect(data.onlyRemote).toBe('后台新增');
+    // 后台 example 为空：跳过写入 → 退 {key} 占位
+    expect(data.blank).toBe('{blank}');
+  });
+
+  it('remoteSchemaDefs：画布未引用的变量不进入示例数据；后台图片 example 注入预览；非数组容错', () => {
+    const config = {
+      objects: [
+        { type: 'i-text', text: '{{name}}' },
+        { type: 'image', isVariableImage: true, src: '{{course.cover}}' },
+      ],
+    };
+    const remoteDefs = [
+      { path: 'name', label: 'name', type: 'text', example: '方方方' },
+      { path: 'unused.var', label: 'unused.var', type: 'text', example: '画布未引用' },
+      { path: 'course.cover', label: 'course.cover', type: 'image', example: 'http://x/c.png' },
+    ];
+    const data = deriveFallbackSampleData(config, remoteDefs);
+    expect(data.name).toBe('方方方');
+    expect(getPathValue(data, 'unused.var')).toBeUndefined();
+    // 后台变量表图片 example → 注入预览渲染示例图
+    expect(getPathValue(data, 'course.cover')).toBe('http://x/c.png');
+    // 非数组/缺省容错：行为与不传一致（退 {key} 占位）
+    expect(deriveFallbackSampleData(config, null).name).toBe('{name}');
+    expect(deriveFallbackSampleData(config).name).toBe('{name}');
+  });
+
+  it('默认纯色图与 @/core/variablePlaceholder 规格一致（自包含实现防漂移）', () => {
+    const config = {
+      objects: [{ type: 'image', isVariableImage: true, src: '{{cover}}' }],
+    };
+    expect(deriveFallbackSampleData(config).cover).toBe(makeVariablePlaceholderDataUrl());
   });
 });

@@ -52,6 +52,7 @@
         ref="renderer"
         :json="json"
         :data="data"
+        :schema="schema"
         :adapters="adapters"
         @ready="onReady"
         @rendered="onRendered"
@@ -189,13 +190,24 @@ function makePosterJson() {
       },
     ],
     variableMeta: {
+      version: 1,
       delimiter: { start: '{{', end: '}}' },
-      variables: [
-        { name: 'name', example: '活动海报' },
-        { name: 'content', example: '这里是一段正文' },
-        { name: 'avatar', example: 'https://picsum.photos/seed/a/240/160' },
-        { name: 'bg', example: 'https://picsum.photos/seed/bg/720/1280' },
-        { name: 'qr', example: 'https://example.com' },
+      schema: [
+        { path: 'name', label: '标题', type: 'text', example: '活动海报' },
+        { path: 'content', label: '正文', type: 'text', example: '这里是一段正文' },
+        {
+          path: 'avatar',
+          label: '头像',
+          type: 'image',
+          example: 'https://picsum.photos/seed/a/240/160',
+        },
+        {
+          path: 'bg',
+          label: '背景',
+          type: 'image',
+          example: 'https://picsum.photos/seed/bg/720/1280',
+        },
+        { path: 'qr', label: '二维码链接', type: 'qrcode', example: 'https://example.com' },
       ],
     },
   };
@@ -224,6 +236,17 @@ export default {
       },
     };
 
+    // 变量表（可选注入）：渲染前按 defaultValue 补齐缺失数据；
+    // 不传则与旧版行为一致。清空某个变量的输入（空串仍视为已提供，
+    // 需删除该字段才能触发默认值回退）
+    const schema = ref([
+      { path: 'name', label: '标题', type: 'text', defaultValue: '未命名活动' },
+      { path: 'content', label: '正文', type: 'text' },
+      { path: 'avatar', label: '头像', type: 'image' },
+      { path: 'bg', label: '背景', type: 'image' },
+      { path: 'qr', label: '二维码链接', type: 'qrcode' },
+    ]);
+
     // 按当前 JSON 动态枚举变量路径（含 group.objects / 背景 rect 的 fill.source）
     const variables = computed(() => extractVariables(json.value || {}));
     const delimiterOf = () => {
@@ -242,13 +265,13 @@ export default {
       variables.value.forEach((path) => {
         next[path] = prev[path] !== undefined ? prev[path] : '';
       });
-      // 用 variableMeta.variables[].example 作为示例值（仅首次/空值时回填）
+      // 用 variableMeta.schema[].example 作为示例值（仅首次/空值时回填）
       if (seedExamples) {
         const meta = json.value && json.value.variableMeta;
-        if (meta && Array.isArray(meta.variables)) {
-          meta.variables.forEach((v) => {
-            if (v && typeof v.path === 'string' && v.example !== undefined && next[v.path] === '') {
-              next[v.path] = v.example;
+        if (meta && Array.isArray(meta.schema)) {
+          meta.schema.forEach((d) => {
+            if (d && typeof d.path === 'string' && d.example !== undefined && next[d.path] === '') {
+              next[d.path] = d.example;
             }
           });
         }
@@ -357,6 +380,7 @@ export default {
       tokenOf,
       setVar,
       adapters,
+      schema,
       status,
       renderer,
       renderKey,

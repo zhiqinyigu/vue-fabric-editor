@@ -5,11 +5,11 @@
     :is-configured="hasPosterConfig"
     :resolve-preview="resolvePreview"
     :validate="validate"
-    :post-render="postRender"
     :preview-error="convertError"
     :preview-warning="convertWarning"
     :adapters="adapters"
     :sample-data="effectiveSampleData"
+    :pure-sample-data="pureSampleData"
     :preview-height="previewHeight"
     :readonly="readonly"
     :deletable="deletable"
@@ -25,12 +25,12 @@ import { Message, Modal } from 'view-design';
 import PosterEntryStage from '../PosterEntryStage.vue';
 import { parsePosterJson } from '../usePosterEntry';
 import { openHandoff, consumeHandoffResult, HANDOFF_PREFIX } from '../handoff';
+import { createVariableSchemaAdapter } from './variableSchemaAdapter';
 import {
   hasPosterConfig,
   isLegacyPosterConfig,
   convertLegacyToStandard,
   deriveFallbackSampleData,
-  layoutLegacyImages,
 } from './legacyPosterUtils';
 
 /**
@@ -41,9 +41,14 @@ import {
  *     :value="data.marketConfig.courseSharePosterConfig"  // 旧格式对象/JSON 字符串，或标准 fabric JSON
  *     :field="{ key: 'courseSharePosterConfig', title: '讨论区分享海报' }"
  *     :sample-data="sampleData"      // 变量示例值（预览渲染用：nickname / bookshelfImage / avatar …）
- *                                    // 未提供的文本变量自动以 `{key}` 占位兜底；图片变量不填
+ *                                    // 未提供的文本变量自动以 `{key}` 占位兜底；图片变量无例值时
+ *                                    // 以默认纯色图兜底（派生源为转换后的标准 JSON）
  *     :scope-keys="scopeKeys"        // 可选；已知变量名列表。不传则自动从旧数据扫描变量引用兜底
  *     :adapters="adapters"
+ *     :variable-context="variableKeys"  // 可选；变量表存储键 { pagePath, keyStr }（拼接规则由
+ *                                       // 业务侧登记，posterName 取 field.key）。经交接 query
+ *                                       // category/fieldId 传编辑器页，并驱动卡片预览示例值拉取
+ *                                       // （后台变量表 example 覆盖内嵌快照）
  *     editor-route="/poster-editor"  // 可选；提供则内置编辑器跳转与结果回传
  *     @input="v => (data.marketConfig.courseSharePosterConfig = v)"
  *   />
@@ -65,13 +70,21 @@ export default {
     value: { type: [Object, String], default: '' },
     // 字段定义：{ key, title, description? }（key 同时用作编辑器交接信封键）
     field: { type: Object, required: true },
-    // 变量示例数据（预览渲染用）。未提供的文本变量自动以 `{key}` 占位兜底（图片变量不填）；
-    // 旧格式与标准 fabric JSON（编辑器保存回传后的值形态）均可推算
+    // 变量示例数据（预览渲染用）。未提供的文本变量自动以 `{key}` 占位兜底；图片变量无例值时
+    // 以默认纯色图兜底（旧格式与标准 fabric JSON 均可推算，旧格式经转换后派生）
     sampleData: { type: Object, default: () => ({}) },
+    // 预览数据严格按业务 sampleData 渲染：不做 {key} 占位与变量表/内嵌快照 example 兜底
+    // （不拉后台变量表），并隐藏示例/原样切换（证书下发等纯用户数据场景）
+    pureSampleData: { type: Boolean, default: false },
     // 已知变量名列表（旧格式转换时保留 {{key}} 变量；如 variableDescription 的 name 集合）。
     // 不传时自动从旧数据扫描变量引用兜底（见 extractLegacyVarKeys）；传则完全手动控制。
     scopeKeys: { type: Array, default: () => [] },
     adapters: { type: Object, default: () => ({}) },
+    // 变量表存储键（业务侧拼好 { pagePath, keyStr }）：
+    // openEditor 时以 query { category: pagePath, fieldId: keyStr } 透传给编辑器页
+    // （editor 页读取后注入变量表存储适配器）；同时驱动卡片预览示例值拉取
+    // （后台变量表 example 覆盖内嵌快照，见 remoteSchemaDefs）；不传则不落库、预览退本地推导
+    variableContext: { type: Object, default: () => ({}) },
     // 图片加载失败（如跨域）二级警告文案；支持 {count} 占位符；空则用内置默认文案
     imageLoadWarning: { type: String, default: '' },
     // 编辑器页路由路径；不传则 edit-page 事件外抛（由业务自行 window.open）
@@ -143,11 +156,65 @@ export default {
       return hit.json;
     };
 
-    // 示例数据合并（按 key，外部优先）：业务 sampleData > variableMeta.schema 示例值 > `{key}` 占位
-    // （后两层由 deriveFallbackSampleData 生成；图片变量一律不填，保持变量图分支）
+    // 后台变量表定义（adapters.variable list 产物）：预览示例值以后台为权威（多人协同）。
+    // 有存储键时进卡即拉一次（每卡 1 个请求）；失败/无存储键静默降级为本地推导
+    // （内嵌快照 > `{key}` 占位）；拉到后经 PosterPreview 的 data watch 触发预览重绘
+    const remoteSchemaDefs = ref([]);
+    const ctx = props.variableContext || {};
+    if (ctx.pagePath && ctx.keyStr && !props.pureSampleData) {
+      let disposed = false;
+      onBeforeUnmount(() => {
+        disposed = true;
+      });
+      createVariableSchemaAdapter({ pagePath: ctx.pagePath, keyStr: ctx.keyStr })
+        .list()
+        .then((defs) => {
+          if (!disposed) remoteSchemaDefs.value = Array.isArray(defs) ? defs : [];
+        })
+        .catch((e) => console.warn('[LegacyPosterEntry] 变量表拉取失败，预览退本地推导', e));
+    }
+
+    // 示例数据合并（按 key，外部优先）：业务 sampleData > 后台变量表例值 >
+    // value 内嵌 variableMeta.schema 例值 > `{key}`/默认纯色图（后三层在 derive 内合并）。
+    // 派生源统一为标准 JSON：标准值直接用；旧格式先经 toStandard 转换（旧数据的变量来自
+    // avatarPosition/nickNamePosition 等定位字段，仅"转换后"才可见 {{key}}，直接扫原始值
+    // 会漏掉这些变量 → 示例模式缺图/缺占位）
+    const derivedFallback = ref({});
+    let derivedSeq = 0;
+    const refreshDerivedFallback = async () => {
+      const seq = ++derivedSeq;
+      const v = props.value;
+      if (props.pureSampleData || !v) {
+        derivedFallback.value = {};
+        return;
+      }
+      let source = null;
+      if (typeof v === 'string') {
+        try {
+          const parsed = JSON.parse(v);
+          if (parsed && Array.isArray(parsed.objects)) source = parsed;
+        } catch (e) {
+          // 非 JSON 字符串按旧格式处理
+        }
+      } else if (v && Array.isArray(v.objects)) {
+        source = v;
+      }
+      if (!source) {
+        source = await toStandard(valueStr.value);
+        if (seq !== derivedSeq) return;
+      }
+      derivedFallback.value =
+        source && Array.isArray(source.objects)
+          ? deriveFallbackSampleData(source, remoteSchemaDefs.value)
+          : {};
+    };
+    watch([() => props.value, remoteSchemaDefs], refreshDerivedFallback, { immediate: true });
+
     const effectiveSampleData = computed(() => {
-      const derived = deriveFallbackSampleData(props.value);
-      if (!Object.keys(derived).length) return props.sampleData;
+      // 纯用户数据场景：跳过兜底派生（{key} 占位 / 变量表与内嵌快照例值一律不注入）
+      if (props.pureSampleData) return props.sampleData;
+      const derived = derivedFallback.value;
+      if (!derived || !Object.keys(derived).length) return props.sampleData;
       return { ...derived, ...props.sampleData };
     });
 
@@ -174,15 +241,6 @@ export default {
       const json = await toStandard(obj);
       if (!json) return { ok: false, error: convertError.value || '旧版海报配置转换失败' };
       return { ok: true, json, preview: json };
-    };
-
-    // 渲染后布局：旧版头像/变量图与标准变量图按版位就位（图片元素就绪后）。
-    // 布局经动态 import 异步完成：FabricRenderer 自身重绘在 emitted 前已执行，
-    // requestRenderAll 必须等布局 resolve 后再调，否则改完属性没人重绘
-    const postRender = ({ canvas } = {}) => {
-      layoutLegacyImages(canvas).then((changed) => {
-        if (changed) canvas.requestRenderAll();
-      });
     };
 
     // 组装编辑器页 query：交接参数 + 来源页回跳 + 变量表存储键（业务侧拼好的 pagePath/keyStr，
@@ -249,7 +307,7 @@ export default {
       const href = router
         ? router.resolve({
             path: props.editorRoute,
-            query: { ...q, from: route.fullPath || '' },
+            query: buildEditorQuery(q, route),
           }).href
         : `${props.editorRoute}?field=${q.field}&token=${q.token}`;
       window.open(href, '_blank');
@@ -342,7 +400,6 @@ export default {
       effectiveSampleData,
       resolvePreview,
       validate,
-      postRender,
       onInput,
       openEditor,
     };

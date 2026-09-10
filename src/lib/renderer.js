@@ -35,6 +35,25 @@ export {
 } from '@/core/variableEngine';
 // 变量图渲染期布局（渲染器在图片就绪后自动执行；导出供宿主复用/测试）
 export { layoutVariableImages } from '@/core/variableImageFit';
+// 变量占位兜底（自助注册）：未替换的模板 JSON（原样/编辑态）中变量图/变量背景显示编辑器同款占位
+//（幂等；也可经 RendererCore options.templateMode 注册）
+export { installRenderVariableImageFallback } from '@/core/renderVariableImageFallback';
+// 运行时单实例注入：消费方入口调用一次即可（跨打包器通用，无需构建期 alias）。
+// 详见 PACKAGING.md「运行时单实例注入接口」。
+export { installRuntime, isRuntimeInjected } from '@/core/runtime';
+// 变量表（schema）纯函数：业务注入后渲染容错（默认值回退）与编辑器对齐
+export {
+  VARIABLE_TYPES,
+  inferVariableType,
+  normalizeVariableDef,
+  normalizeVariableDefs,
+  validateVariableDef,
+  mergeVariableSchema,
+  applySchemaDefaults,
+  applySchemaDefaultsFlat,
+  applySchemaExamplesFlat,
+  resolveRenderSchema,
+} from '@/core/variableSchema';
 export { normalizeAssetUrl, appendCacheBustParam } from '@/core/assetUrl';
 // 带 CORS 回退的图片加载：crossOrigin 请求失败自动去掉 crossOrigin 重试（保显示，
 // 代价是画布被污染、导出受限）；供宿主自行加载/测量图片时复用

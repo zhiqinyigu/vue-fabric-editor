@@ -13,16 +13,23 @@
         <slot name="preview" :preview="previewJson || parsed">
           <PosterPreview
             :json="previewJson || parsed"
-            :data="sampleData"
+            :data="previewData"
             :adapters="adapters"
+            :options="previewOptions"
             :height="520"
             :fixed-width="620"
             :post-render="handlePostRender"
             :error="previewError"
+            :warning="previewWarning"
             @error="$emit('error')"
           />
         </slot>
-        <!-- 只读预览：左上角提供下载（导出 sampleData 渲染出的预览图）；非只读时该位置为「配置海报」 -->
+        <!-- 悬浮示例/原样切换：开=注入示例值渲染（默认），关=模板原样展示；纯用户数据场景隐藏 -->
+        <div v-if="!pureSampleData" class="pvm-mode" @click.stop>
+          <span class="pvm-mode-text">{{ modeSwitch ? '示例预览' : '原样展示' }}</span>
+          <iSwitch v-model="modeSwitch" />
+        </div>
+        <!-- 只读预览：左上角提供下载（导出当前预览渲染的画布）；非只读时该位置为「配置海报」 -->
         <Button
           v-if="readonly"
           class="pvm-float-left"
@@ -84,13 +91,14 @@
           <slot name="preview" :preview="pendingPreview || pending">
             <PosterPreview
               :json="pendingPreview || pending"
-              :data="sampleData"
               :adapters="adapters"
+              :options="pendingPreviewOptions"
               :height="280"
               :fixed-width="620"
               :post-render="postRender"
               :error="previewError"
               :warning="previewWarning || parseWarning"
+              @error="$emit('error')"
             />
           </slot>
         </div>
@@ -118,8 +126,8 @@ import { parsePosterJson } from './usePosterEntry';
 /**
  * 海报查看/配置双模式弹窗（同一交互链，数据格式可插拔）
  * - 预览模式：大图 + 悬浮操作按钮（左上「配置海报」/右上「删除」），有 JSON 打开时默认；
- *   大图默认 PosterPreview（previewJson || parsed，previewJson 为外部解析的预览渲染数据），
- *   提供 #preview 插槽时由外部渲染器接管
+ *   大图默认 PosterPreview（previewJson || parsed 为渲染 JSON；渲染变量数据 previewData
+ *   由舞台单点派生下发，示例/原样开关联动见 sampleMode），提供 #preview 插槽时由外部渲染器接管
  *   （:preview 为预览渲染数据：previewJson || parsed；粘贴预览为 pendingPreview || pending）
  * - JSON 输入模式：回显当前配置、复制按钮悬浮输入框右上角、输入防抖自动解析出预览；
  *   外部值变更（编辑器保存回传）时，未手动编辑的 JSON 输入态自动重置并切回预览视图；
@@ -149,7 +157,14 @@ export default {
     // 渲染完成钩子（透传 PosterPreview，用于渲染后布局）
     postRender: { type: Function, default: null },
     adapters: { type: Object, default: () => ({}) },
-    sampleData: { type: Object, default: () => ({}) },
+    // 渲染变量数据（舞台单点派生下发，示例/原样开关联动见 sampleMode），提供 #preview 插槽时由外部渲染器接管
+    previewData: { type: Object, default: () => ({}) },
+    // 大图渲染器 options（舞台 previewOptions 透传：原样模式 templateMode 开关）
+    previewOptions: { type: Object, default: () => ({}) },
+    // 示例/原样开关状态（受控于舞台，sample-mode.sync 双向；仅驱动开关显示与回写）
+    sampleMode: { type: Boolean, default: true },
+    // 纯用户数据场景：隐藏示例/原样开关（大图数据由舞台 previewData 保证严格按业务数据）
+    pureSampleData: { type: Boolean, default: false },
     transform: { type: Function, default: null },
     // 只读预览：隐藏「配置海报」「删除」等编辑入口，仅可查看
     readonly: { type: Boolean, default: false },
@@ -161,6 +176,18 @@ export default {
   setup(props, { emit }) {
     const mode = ref('preview'); // 'preview' | 'json'
     const text = ref('');
+
+    // 示例/原样开关（受控：写经 update:sampleMode 同步回舞台重派生，卡片/大图两处联动）；
+    // 大图数据由舞台下发（previewData prop），此处不重复派生。
+    // 绑定名用 modeSwitch：与 prop sampleMode 同名会触发 Vue setup/prop 冲突警告
+    const modeSwitch = computed({
+      get: () => props.sampleMode,
+      set: (v) => emit('update:sampleMode', v),
+    });
+    // 待应用预览固定原样展示：直接渲染粘贴的模板 JSON（模板模式，变量 token 原样保留），
+    // 与编辑器画布所见一致；不注入任何示例值
+    // 恒启用模板模式：未解析变量图/背景显示编辑器同款占位，文本显示 {{key}} 字面量
+    const pendingPreviewOptions = { templateMode: true };
     const pending = ref(null); // 应用值（validate 返回的 json）
     const pendingPreview = ref(null); // 预览渲染数据（validate 返回的 preview，缺省用 pending）
     const parsedText = ref('');
@@ -347,7 +374,7 @@ export default {
       if (props.postRender) props.postRender(payload);
     };
 
-    // 只读预览下载：导出当前预览渲染的画布（sampleData 已注入；画布背板为海报原始像素，非缩放尺寸）
+    // 只读预览下载：导出当前预览渲染的画布（随示例/原样切换，所见即所得；画布背板为海报原始像素，非缩放尺寸）
     const onDownload = () => {
       if (!renderedCanvas || typeof renderedCanvas.toDataURL !== 'function') {
         Message.warning('海报尚未渲染完成，请稍后再试');
@@ -368,6 +395,8 @@ export default {
     return {
       mode,
       text,
+      modeSwitch,
+      pendingPreviewOptions,
       pending,
       pendingPreview,
       error,
@@ -415,6 +444,25 @@ export default {
   .pvm-float-right {
     right: 8px;
     box-shadow: 0 2px 10px rgba(237, 64, 20, 0.25);
+  }
+
+  // 示例/原样切换：左上悬浮于操作按钮下方（只读/编辑两种形态的左上按钮高度一致）
+  .pvm-mode {
+    position: absolute;
+    top: 65px;
+    left: 8px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  .pvm-mode-text {
+    font-size: 12px;
+    color: #fff;
   }
 }
 

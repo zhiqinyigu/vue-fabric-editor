@@ -24,6 +24,8 @@ import {
   isStrictCrossOrigin,
   addCorsFallbackListener,
 } from './imageLoader';
+import { installRenderVariableImageFallback } from './renderVariableImageFallback';
+import { renderObjects, DEFAULT_DELIMITER } from './variableEngine';
 import './renderPatches';
 
 class RendererCore extends PluginEngine {
@@ -43,6 +45,13 @@ class RendererCore extends PluginEngine {
       this.emit('renderer:warn', { code: 'IMAGE_CORS_FALLBACK', ...info });
     });
     this._initHooks();
+    // 模板模式（原样展示，兼容旧名 variablePlaceholder）：渲染未替换的模板 JSON，
+    // 未解析变量由占位补丁呈现（与编辑器画布同语义）；数据模式下不安装，
+    // 且加载前会清空残留 token，保证与占位能力彻底隔离（无跨实例泄漏）。
+    this.templateMode = options.templateMode === true || options.variablePlaceholder === true;
+    if (this.templateMode) {
+      installRenderVariableImageFallback(options.delimiter);
+    }
     // 渲染所需插件
     this.use(ServersPlugin);
     this.use(QrCodePlugin, { defaultData: options.defaultQrCodeData });
@@ -65,10 +74,21 @@ class RendererCore extends PluginEngine {
     // options.crossOrigin = 'strict' 保持严格 CORS（不启用自动回退）。
     const opts = this.options || {};
     const crossOrigin = normalizeCrossOrigin(opts.crossOrigin);
+    // 数据模式：清空未解析变量残留（等价 renderObjects(json, {})，缺值字段替换为空），
+    // 保证即使占位补丁已被他处全局安装，也不会把未解析变量渲染成占位（严格渲染器语义）
+    let prepared = json;
+    if (!this.templateMode && json) {
+      const raw = typeof json === 'string' ? JSON.parse(json) : json;
+      const delimiter =
+        (raw && raw.variableMeta && raw.variableMeta.delimiter) ||
+        opts.delimiter ||
+        DEFAULT_DELIMITER;
+      prepared = renderObjects(raw, {}, delimiter);
+    }
     return new Promise((resolve, reject) => {
       try {
         this.getPlugin('ServersPlugin').loadJSON(
-          json,
+          prepared,
           () => {
             resolve();
             callback && callback();

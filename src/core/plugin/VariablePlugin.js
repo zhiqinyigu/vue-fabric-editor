@@ -16,8 +16,23 @@ import {
   getVariableFieldOfObject,
   getByPath,
   setByPath,
+  getValueByPath,
 } from '../variableEngine';
+import {
+  inferVariableType,
+  normalizeVariableDef,
+  normalizeVariableDefs,
+  validateVariableDef,
+  applySchemaDefaultsFlat,
+  applySchemaExamplesFlat,
+} from '../variableSchema';
 import { computeBackgroundLayout, replaceTilePatternSource } from '../workspaceGeometry';
+import { extractVariableLabel as sharedExtractVariableLabel } from '../variablePlaceholder';
+import {
+  installVariablePlaceholderPatch,
+  makeVariablePlaceholder,
+  patchVariableImageGetSrc,
+} from '../variablePlaceholderPatch';
 
 class VariablePlugin {
   constructor(canvas, editor) {
@@ -28,6 +43,20 @@ class VariablePlugin {
     this.testData = {};
     // 是否处于变量预览模式
     this.previewing = false;
+    // 变量表（变量字典）：业务侧外部注入（adapter / api），会话内存为权威；
+    // 模板持久化的是 variableMeta.schema 快照（完整导出全量 / 精简导出仅 defaultValue）
+    this.variableSchema = [];
+    // 会话内"导入"变量（来自 adapter.list / api 注入）的 path 集合：只读；
+    // 不在集合内的即编辑器内新建的自定义变量（可编辑/删除）
+    this._schemaImportedPaths = new Set();
+    // 开发者后门：true 时跳过 imported 只读限制（可删除导入变量）。
+    // 仅影响权限判定，不重建 _schemaImportedPaths，关掉即恢复只读
+    this._schemaEditable = false;
+    // 变量表注入协议实现（业务无关，可选）
+    this.schemaAdapter = null;
+    // schema 加载状态：_schemaLoaded 仅作状态记录（拉取不幂等，多人协同每次都拉最新）；_schemaLoading 并发去重
+    this._schemaLoaded = false;
+    this._schemaLoading = null;
     // 预览期快照：{ obj, field, oldValue }[]，用于退出时恢复
     this._snapshot = [];
     // 资源替换令牌：图片/条码的展示资源替换是【异步加载】的，
@@ -50,8 +79,9 @@ class VariablePlugin {
       }
     };
     this._initListeners();
-    // 覆盖 fabric.Image.fromObject：保证所有加载路径（loadFromJSON / clone / fromObject）都能还原变量图片
-    this._patchImageFromObject();
+    // 覆盖 fabric.Image.fromObject：保证所有加载路径（loadFromJSON / clone / fromObject）
+    // 都能还原变量图片（与渲染器共用 variablePlaceholderPatch 单一事实源；delimiter 动态取值）
+    installVariablePlaceholderPatch(() => this.delimiter);
   }
 
   _initListeners() {
@@ -94,6 +124,163 @@ class VariablePlugin {
     return this.testData;
   }
 
+  /* ---------- API: 变量表（schema，业务注入的变量字典） ---------- */
+  getSchemaAdapter() {
+    return this.schemaAdapter;
+  }
+  // 注入协议实现；不立即拉取（注入/更换时清掉 in-flight，下次 ensureSchemaLoaded 按新 adapter 拉取）
+  setSchemaAdapter(adapter) {
+    this.schemaAdapter =
+      adapter && typeof adapter === 'object' && typeof adapter.list === 'function' ? adapter : null;
+    this._schemaLoaded = false;
+    this._schemaLoading = null;
+    return this.schemaAdapter;
+  }
+  // 拉取变量表（每次调用都真实拉取最新，适配多人协同；同刻并发调用合并为一次请求）：
+  // 有 adapter 且无 in-flight 时调 list()；无 adapter 直接返回当前会话表。失败 reject 并允许重试
+  ensureSchemaLoaded() {
+    if (this._schemaLoading) return this._schemaLoading;
+    if (!this.schemaAdapter) return Promise.resolve(this.getVariableSchema());
+    this._schemaLoading = this.schemaAdapter
+      .list()
+      .then((defs) => {
+        // 导入为权威：同 path 的会话内自定义变量被覆盖
+        const imported = normalizeVariableDefs(defs);
+        const importedPaths = new Set(imported.map((d) => d.path));
+        const customs = this.variableSchema.filter(
+          (d) => !this._schemaImportedPaths.has(d.path) && !importedPaths.has(d.path)
+        );
+        this.variableSchema = [...imported, ...customs];
+        this._schemaImportedPaths = importedPaths;
+        this._schemaLoaded = true;
+        this._schemaLoading = null;
+        this._emitSchemaChange();
+        return this.getVariableSchema();
+      })
+      .catch((err) => {
+        this._schemaLoading = null;
+        throw err;
+      });
+    return this._schemaLoading;
+  }
+  // 直接注入变量表（无 adapter 的静态场景）：视为导入（只读）；
+  // 保留会话内不冲突的自定义变量
+  setVariableSchema(defs) {
+    const imported = normalizeVariableDefs(defs);
+    const importedPaths = new Set(imported.map((d) => d.path));
+    const customs = this.variableSchema.filter(
+      (d) => !this._schemaImportedPaths.has(d.path) && !importedPaths.has(d.path)
+    );
+    this.variableSchema = [...imported, ...customs];
+    this._schemaImportedPaths = importedPaths;
+    this._schemaLoaded = true;
+    this._emitSchemaChange();
+    return this.getVariableSchema();
+  }
+  // 会话变量表快照（深拷贝，防外部改写内部状态）
+  getVariableSchema() {
+    return this.variableSchema.map((d) => ({ ...d }));
+  }
+  // 新建自定义变量（导入同 path 为权威，校验失败拒绝）
+  addCustomVariable(def) {
+    const normalized = normalizeVariableDef(def);
+    if (!normalized) {
+      return Promise.reject(this._schemaError('invalid_variable_def', ['empty_path']));
+    }
+    const { valid, errors } = validateVariableDef(normalized, {
+      existingPaths: this.variableSchema.map((d) => d.path),
+      delimiter: this.delimiter,
+    });
+    if (!valid) {
+      return Promise.reject(this._schemaError('invalid_variable_def', errors));
+    }
+    this.variableSchema = [...this.variableSchema, normalized];
+    this._emitSchemaChange();
+    return Promise.resolve(this.getVariableSchema());
+  }
+  // 更新变量（path 不可改；导入变量可编辑，仅删除受限）
+  updateCustomVariable(path, patch) {
+    const target = this.variableSchema.find((d) => d.path === path);
+    if (!target) {
+      return Promise.reject(this._schemaError('variable_not_found', ['not_found']));
+    }
+    const next = normalizeVariableDef({ ...target, ...(patch || {}), path: target.path });
+    if (!next) {
+      return Promise.reject(this._schemaError('invalid_variable_def', ['empty_path']));
+    }
+    this.variableSchema = this.variableSchema.map((d) => (d.path === path ? next : d));
+    this._emitSchemaChange();
+    return Promise.resolve(this.getVariableSchema());
+  }
+  // 删除变量（导入变量不可删除，业务权威由后台管理生命周期；后门开启时放行）
+  removeCustomVariable(path) {
+    if (!this._schemaEditable && this._schemaImportedPaths.has(path)) {
+      return Promise.reject(this._schemaError('imported_readonly', ['imported_readonly']));
+    }
+    this.variableSchema = this.variableSchema.filter((d) => d.path !== path);
+    this._emitSchemaChange();
+    return Promise.resolve(this.getVariableSchema());
+  }
+  // 开发者后门开关：setSchemaEditable(true) 后 imported 变量可删除，false 恢复只读
+  setSchemaEditable(editable = true) {
+    this._schemaEditable = !!editable;
+    // 复用既有广播：VariableConfigModal 的 toDefRow 会重新求值 row.imported，
+    // 删除按钮 v-if 自动显隐（Vue 侧无需改动）
+    this.editor.emit('variable:schemaChange', this.getVariableSchema());
+    return this.getVariableSchema();
+  }
+  isSchemaEditable() {
+    return this._schemaEditable;
+  }
+  // 该 path 是否为导入变量（不可删除，其余可编辑），供 UI 区分来源
+  isImportedVariable(path) {
+    if (this._schemaEditable) return false; // 后门：全部视为可编辑
+    return this._schemaImportedPaths.has(path);
+  }
+  // 全量保存到业务后台（last-write-wins，业务侧自 diff）；未实现 save 时 reject（UI 切导出）
+  saveVariableSchema() {
+    if (!this.schemaAdapter || typeof this.schemaAdapter.save !== 'function') {
+      return Promise.reject(this._schemaError('save_not_implemented', ['save_not_implemented']));
+    }
+    return this.schemaAdapter.save(this.getVariableSchema()).then(() => this.getVariableSchema());
+  }
+  // 导出变量表 JSON 字符串（无 save 时的对接兜底）
+  exportVariableSchema() {
+    return JSON.stringify(this.getVariableSchema(), null, 2);
+  }
+  _schemaError(code, errors) {
+    const err = new Error(`[VariablePlugin] ${code}: ${(errors || []).join(',')}`);
+    err.code = code;
+    err.errors = errors || [];
+    return err;
+  }
+  // schema 变更统一出口：按 example 预填测试数据；预览态下补齐默认值并重刷，再广播
+  _emitSchemaChange() {
+    this._mergeSchemaPrefill();
+    if (this.previewing) {
+      this._mergeSchemaDefaults();
+      this.refreshPreview();
+    }
+    this.editor.emit('variable:schemaChange', this.getVariableSchema());
+  }
+  // schema 注入/变更时按 example 预填测试数据（业务建议测试值）：
+  // 仅缺失 key 写入，testData 已填值权威（与 variableMeta.example 回填同一语义）
+  _mergeSchemaPrefill() {
+    const next = applySchemaExamplesFlat(this.testData, this.variableSchema);
+    if (next !== this.testData) {
+      this.testData = next;
+      this.editor.emit('variable:testDataChange', { ...this.testData });
+    }
+  }
+  // 变量表默认值补齐测试数据（扁平映射表语义；testData 已填值权威，含空串不覆盖）
+  _mergeSchemaDefaults() {
+    const next = applySchemaDefaultsFlat(this.testData, this.variableSchema);
+    if (next !== this.testData) {
+      this.testData = next;
+      this.editor.emit('variable:testDataChange', { ...this.testData });
+    }
+  }
+
   /* ---------- API: 变量收集 ---------- */
   getVariables() {
     // 直接遍历画布对象收集变量，避免与 getJson（附加 variableMeta）形成递归
@@ -114,6 +301,30 @@ class VariablePlugin {
     };
     collect(this.canvas.getObjects());
     return Array.from(set);
+  }
+  // 扫描画布返回 [{ path, fields: string[] }]（变量表对齐视图与"收编"的数据源）：
+  // 同一变量可能同时用于多个占位字段（文本/图片 URL），聚合去重
+  getVariableEntries() {
+    const map = new Map();
+    const collect = (objs) => {
+      objs.forEach((obj) => {
+        if (obj.objects && Array.isArray(obj.objects)) {
+          collect(obj.objects);
+          return;
+        }
+        getVariableFieldOfObject(obj).forEach((field) => {
+          const value = getByPath(obj, field);
+          if (typeof value !== 'string') return;
+          extractVariablesFromString(value, this.delimiter).forEach((p) => {
+            if (!map.has(p)) map.set(p, []);
+            const fields = map.get(p);
+            if (!fields.includes(field)) fields.push(field);
+          });
+        });
+      });
+    };
+    collect(this.canvas.getObjects());
+    return Array.from(map, ([path, fields]) => ({ path, fields }));
   }
   // 判断字符串是否含变量（供网络图片 URL 输入框使用）
   containsVariable(text) {
@@ -149,9 +360,9 @@ class VariablePlugin {
     });
   }
   // 从变量 URL 提取叠加层显示的变量名（如 "user.id"），多个变量用 ", " 连接
+  //（提取逻辑与渲染器占位兜底共用 variablePlaceholder.js，单一事实源）
   _extractVariableLabel(src) {
-    const vars = extractVariablesFromString(src, this.delimiter);
-    return vars.join(', ') || 'variable';
+    return sharedExtractVariableLabel(src, this.delimiter);
   }
   // 就地更新变量图片的 src（属性面板"网络图片地址"编辑入口）：
   // - 新地址仍含变量：重建占位图展示，保持当前版位（left/top/scale/宽高）不变
@@ -244,16 +455,9 @@ class VariablePlugin {
   // 生成"动态变量占位图"：纯色底（240x160）
   // 边框与变量名由 VariableImage 矢量叠加层实时绘制（字号按占位符 85% 宽度动态计算），
   // 反缩放补偿保证任意缩放文字不变形、不模糊（位图内嵌文字会随位图拉伸变形）
+  // 规格统一在 variablePlaceholder.js（与渲染器占位兜底共用同一工厂，单一事实源）
   _makePlaceholder() {
-    const width = 240;
-    const height = 160;
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#F1F3F5';
-    ctx.fillRect(0, 0, width, height);
-    return canvas.toDataURL('image/png');
+    return makeVariablePlaceholder();
   }
   // 预热并缓存占位图 element（HTMLImageElement）：
   // 进入预览时触发异步加载，退出预览时用缓存的 element 同步替换展示资源，
@@ -309,73 +513,40 @@ class VariablePlugin {
     this.editor.emit('variable:previewRefresh');
   }
   // 序列化（toObject/toJSON）时，变量图片应输出存储的变量 URL，而非占位图 dataURL
-  // fabric.Image.getSrc 默认取 DOM 元素 src（即占位图 base64），这里按 isVariableImage 兜底返回 this.src
+  //（实现与渲染器共用 variablePlaceholderPatch，单一事实源）
   _patchGetSrc(imgEl) {
-    imgEl.getSrc = function (filtered) {
-      if (
-        (this.get('isVariableImage') === true || this.get('isVariableBackground') === true) &&
-        typeof this.get('src') === 'string'
-      ) {
-        return this.get('src');
-      }
-      return fabric.Image.prototype.getSrc.call(this, filtered);
-    };
-    return imgEl;
+    return patchVariableImageGetSrc(imgEl);
   }
-  // 变量图片的 src 是 "{{var}}" 时，fabric.Image.fromObject 加载失败会直接丢弃对象。
-  // 包装 fromObject：加载时改用占位图，对象创建后还原变量 URL 并补上 getSrc 补丁。
-  _patchImageFromObject() {
-    if (this._imageFromObjectPatched) return;
-    this._imageFromObjectPatched = true;
-    const self = this;
-    const originalFromObject = fabric.Image.fromObject;
-    fabric.Image.fromObject = function (_object, callback) {
-      const isVariableImage =
-        !!_object &&
-        _object.type === 'image' &&
-        (_object.isVariableImage === true ||
-          (typeof _object.src === 'string' && containsVariable(_object.src, self.delimiter)));
-      if (!isVariableImage) {
-        return originalFromObject.call(this, _object, callback);
-      }
-      const variableSrc = typeof _object.src === 'string' ? _object.src : '';
-      const placeholder = self._makePlaceholder(variableSrc);
-      originalFromObject.call(this, { ..._object, src: placeholder }, (instance, isError) => {
-        if (!isError && instance) {
-          instance.set('src', variableSrc);
-          instance.set('isVariableImage', true);
-          instance.set('variableLabel', self._extractVariableLabel(variableSrc));
-          // 恢复变量图片的矢量叠加层渲染（type 保持 image）
-          self._attachVariableOverlay(instance);
-          self._patchGetSrc(instance);
-        }
-        callback && callback(instance, isError);
-      });
-      return undefined;
-    };
-  }
-  // 导入 JSON 前：读取 variableMeta 中的包裹符并应用
+  // 注意：变量图的 fromObject 包装统一由 variablePlaceholderPatch 安装
+  //（编辑器与渲染器共用；见构造函数里的 installVariablePlaceholderPatch）
+  // 导入 JSON 前：读取 variableMeta 中的包裹符并应用；
+  // 新契约（meta.schema）还原模板快照，旧契约（meta.variables[].example）仅回填测试数据
   hookImportBefore(jsonFile) {
     try {
       const json = typeof jsonFile === 'string' ? JSON.parse(jsonFile) : jsonFile;
       if (!json || !json.variableMeta) return Promise.resolve();
-      if (json.variableMeta.delimiter) {
-        this.delimiter = { ...DEFAULT_DELIMITER, ...json.variableMeta.delimiter };
+      const meta = json.variableMeta;
+      if (meta.delimiter) {
+        this.delimiter = { ...DEFAULT_DELIMITER, ...meta.delimiter };
       }
-      // 回填模板保存的测试数据（variableMeta.variables[].example），
-      // 使"变量配置"弹窗打开时能回显该变量上次的测试值；
-      // 仅当内存中还没有该变量值时回填，不覆盖当前会话已填写的值
-      const vars = Array.isArray(json.variableMeta.variables) ? json.variableMeta.variables : [];
-      vars.forEach((v) => {
-        if (
-          v &&
-          typeof v.path === 'string' &&
-          v.example !== undefined &&
-          this.testData[v.path] === undefined
-        ) {
-          this.testData[v.path] = v.example;
-        }
-      });
+      if (Array.isArray(meta.schema) && meta.schema.length) {
+        // 新契约：schema 快照（完整/精简形状均可），还原变量定义 + 测试数据
+        this._applySnapshotSchema(meta.schema);
+      } else if (Array.isArray(meta.variables)) {
+        // 旧契约兼容：回填模板保存的测试数据（variableMeta.variables[].example），
+        // 使"变量配置"弹窗打开时能回显该变量上次的测试值；
+        // 仅当内存中还没有该变量值时回填，不覆盖当前会话已填写的值
+        meta.variables.forEach((v) => {
+          if (
+            v &&
+            typeof v.path === 'string' &&
+            v.example !== undefined &&
+            this.testData[v.path] === undefined
+          ) {
+            this.testData[v.path] = v.example;
+          }
+        });
+      }
     } catch (e) {
       // 解析失败则忽略，保留当前包裹符
     }
@@ -435,8 +606,20 @@ class VariablePlugin {
   }
 
   /* ---------- 非破坏性预览 ---------- */
+  // 字段未解析检测（预览隐藏判据）：该字段任一变量 key 在测试数据中缺失/为空即未填。
+  // 注意在 enterPreview 的 _mergeSchemaDefaults 之后评估——schema defaultValue 已兜底，
+  // 此处"缺失"即真的没有数据来源（与渲染器缺值空串 → 元素消失的语义对齐；
+  // 区别于"整值都是变量"的空串特判，部分含变量的 URL（avatar 前缀）同样命中）
+  _isUnresolved(oldValue) {
+    return extractVariablesFromString(oldValue, this.delimiter).some((p) => {
+      const v = getValueByPath(this.testData, p);
+      return v == null || v === '';
+    });
+  }
   enterPreview() {
     if (this.previewing) return;
+    // 变量表默认值补齐测试数据（仅缺失 key；testData 已填值权威）
+    this._mergeSchemaDefaults();
     // 预热占位图 element 缓存：进入预览期间异步完成加载，
     // 保证退出预览时能【同步】恢复占位图，避免占位图异步加载期间
     // 画布渲染出"测试图 × 占位图 transform"的中间帧（退出瞬间闪测试图）
@@ -532,6 +715,10 @@ class VariablePlugin {
   isPreviewing() {
     return this.previewing;
   }
+  // 当前预览中因缺数据被隐藏的元素数（预览外恒为 0）；UI 层用于可读性提示
+  getHiddenPreviewCount() {
+    return this.previewing ? this._hiddenCount || 0 : 0;
+  }
   // 预览态下测试数据变化时刷新
   refreshPreview() {
     if (!this.previewing) return;
@@ -549,7 +736,7 @@ class VariablePlugin {
       getVariableFieldOfObject(obj).forEach((field) => {
         const value = getByPath(obj, field);
         if (typeof value === 'string' && containsVariable(value, this.delimiter)) {
-          const item = { obj, field, oldValue: value };
+          const item = { obj, field, oldValue: value, oldVisible: obj.visible !== false };
           // 图片 src / 二维码 data / 条形码 value：同时记录原始 transform，
           // 否则预览期为了等比缩放而修改的 width/height/left/top 会污染模板
           if (field === 'src' || field === 'extension.data' || field === 'extension.value') {
@@ -573,20 +760,35 @@ class VariablePlugin {
     // 期间若发生新的应用快照（退出预览、改测试数据重新预览等），
     // 旧令牌的加载回调一律丢弃，避免过期结果覆盖当前状态
     const token = ++this._previewToken;
-    this._snapshot.forEach(({ obj, field, oldValue, oldTransform }) => {
+    // 预览侧隐藏计数（渲染器同语义：无数据/无默认值兜底的字段替换为空串 → 元素不显示）
+    let hiddenCount = 0;
+    this._snapshot.forEach((item) => {
+      const { obj, field, oldValue, oldTransform } = item;
+      // 快照记录的对象可见性（兼容模板本身 visible=false 的对象，退出预览还原）
+      const oldVisible = item.oldVisible !== false;
       if (field === 'text') {
         const next = toPreview ? render(oldValue, this.testData, this.delimiter) : oldValue;
+        // 文本变量维持替换语义（缺值替换为空串、元素本身仍可见仍锁定，与渲染器一致）；
+        // 隐藏语义仅用于图片/背景/二维码等资源类字段
+        obj.set('visible', oldVisible);
         obj.set('text', next);
         obj.initDimensions && obj.initDimensions();
         obj.setCoords && obj.setCoords();
       } else if (field === 'src') {
+        const next = toPreview ? render(oldValue, this.testData, this.delimiter) : oldValue;
+        // 未解析字段（无数据且无默认值兜底）：预览隐藏（渲染器同语义）
+        if (toPreview && this._isUnresolved(oldValue)) {
+          if (obj.visible !== false) hiddenCount++;
+          obj.set('visible', false);
+          return;
+        }
+        obj.set('visible', oldVisible);
         // 背景图：预览按真实尺寸重排 workspace 铺满布局，退出恢复占位布局
         if (obj.id === 'backgroundImage') {
           this._applyBackgroundPreview(obj, oldValue, toPreview, oldTransform, token);
           return;
         }
         // 图片：预览期按替换后 URL 加载；退出时【同步】恢复原始 src 属性，异步仅用于刷新展示
-        const next = toPreview ? render(oldValue, this.testData, this.delimiter) : oldValue;
         obj.set('src', next); // 同步更新 src 属性，保证 getJson 拿到正确值
         // 退出预览：先恢复原始 transform，再加载占位图
         // 避免预览期为了等比缩放而改写 left/top/width/height 污染模板
@@ -598,14 +800,26 @@ class VariablePlugin {
         // 二维码/条形码：内容在 extension 子字段，预览期渲染内容并按原版位重绘图像；
         // 退出时恢复原始内容与 transform，异步仅用于刷新展示
         const next = toPreview ? render(oldValue, this.testData, this.delimiter) : oldValue;
+        // 未解析字段（无数据且无默认值兜底）：预览隐藏（渲染器同语义），
+        // 同时跳过存储值写回，避免空串污染 extension
+        if (toPreview && this._isUnresolved(oldValue)) {
+          if (obj.visible !== false) hiddenCount++;
+          obj.set('visible', false);
+          return;
+        }
+        obj.set('visible', oldVisible);
         setByPath(obj, field, next); // 同步更新存储值，保证 getJson 拿到正确值
         // 退出预览：先恢复原始 transform，再重绘原图
         if (!toPreview && oldTransform) {
           obj.set(oldTransform);
         }
         this._reloadExtensionImage(obj, field, oldTransform, toPreview, token);
+      } else if (!toPreview) {
+        obj.set('visible', oldVisible);
       }
     });
+    // 预览中隐藏的元素数（退出预览/未在预览时归零），供 UI 层提示"哪些预览不出"
+    this._hiddenCount = toPreview ? hiddenCount : 0;
   }
   // 背景图变量预览/恢复：
   // - 预览：src 替换为真实 URL → 加载真实图 → 按真实自然尺寸 + 背景 mode/position
@@ -916,18 +1130,76 @@ class VariablePlugin {
   }
 
   /* ---------- 保存时把 variableMeta 写入模板 JSON 顶层 ---------- */
-  getVariableMeta() {
-    const variables = this.getVariables();
-    return {
-      delimiter: { ...this.delimiter },
-      variables: variables.map((path) => ({
-        path,
-        name: path,
-        // 测试值为编辑端临时预览数据，完整导出时保留；精简导出由导出管线剔除
-        example: this.testData[path] !== undefined ? this.testData[path] : '',
-        required: false,
-      })),
-    };
+  /**
+   * 模板变量元数据（variableMeta）双形状：
+   * - complete=true（saveJson 完整导出）：全量会话表快照（src 来源标记 +
+   *   example 承载测试数据：testData 已填值含空串优先，否则业务预设）；
+   *   画布已用但未定义的 path 合成 def（label=path、按占位字段推断类型、src=custom）
+   * - complete=false（剪贴板 / save-request 精简保存，面向 C 端渲染）：
+   *   仅含「已使用 ∧ 有非空 defaultValue」的 { path, defaultValue } 条目
+   */
+  getVariableMeta(complete = true) {
+    const meta = { version: 1, delimiter: { ...this.delimiter } };
+    if (complete) {
+      const definedPaths = new Set(this.variableSchema.map((d) => d.path));
+      const synthesized = this.getVariableEntries()
+        .filter((e) => !definedPaths.has(e.path))
+        .map((e) =>
+          normalizeVariableDef({
+            path: e.path,
+            label: e.path,
+            type: this._inferTypeFromFields(e.fields),
+            example: this.testData[e.path] !== undefined ? this.testData[e.path] : '',
+            defaultValue: '',
+            description: '',
+          })
+        )
+        .filter(Boolean)
+        .map((d) => ({ ...d, src: 'custom' }));
+      const defs = this.variableSchema.map((d) => ({
+        path: d.path,
+        label: d.label,
+        type: d.type,
+        // example = 测试数据持久化形态：testData 已填值（含空串）权威，否则业务预设
+        example: this.testData[d.path] !== undefined ? this.testData[d.path] : d.example || '',
+        defaultValue: d.defaultValue,
+        description: d.description,
+        src: this._schemaImportedPaths.has(d.path) ? 'imported' : 'custom',
+      }));
+      meta.schema = [...defs, ...synthesized];
+    } else {
+      const used = new Set(this.getVariables());
+      meta.schema = this.variableSchema
+        .filter((d) => used.has(d.path) && typeof d.defaultValue === 'string' && d.defaultValue)
+        .map((d) => ({ path: d.path, defaultValue: d.defaultValue }));
+    }
+    return meta;
+  }
+  // 按占位字段推断类型（多字段时取首个非 text 类型；与收编推断同源）
+  _inferTypeFromFields(fields) {
+    const type = (fields || []).map((f) => inferVariableType(f)).find((t) => t !== 'text');
+    return type || 'text';
+  }
+  /**
+   * 模板快照还原（hookImportBefore 专用）：按 src 还原来源权限
+   * （imported → 只读 / custom → 可编辑）；不覆盖会话内已有定义
+   * （adapter 拉取的业务权威 / 当前会话优先），随后 _emitSchemaChange
+   * 统一做 example 预填与广播
+   */
+  _applySnapshotSchema(defs) {
+    const existing = new Set(this.variableSchema.map((d) => d.path));
+    const importedRaw = new Set(
+      (Array.isArray(defs) ? defs : [])
+        .filter((d) => d && d.src === 'imported' && typeof d.path === 'string')
+        .map((d) => d.path.trim())
+    );
+    const restored = normalizeVariableDefs(defs).filter((d) => !existing.has(d.path));
+    if (!restored.length) return;
+    this.variableSchema = [...this.variableSchema, ...restored];
+    restored.forEach((d) => {
+      if (importedRaw.has(d.path)) this._schemaImportedPaths.add(d.path);
+    });
+    this._emitSchemaChange();
   }
 
   destroy() {
@@ -944,19 +1216,35 @@ VariablePlugin.apis = [
   'setTestData',
   'updateTestData',
   'getVariables',
+  'getVariableEntries',
   'containsVariable',
   'createVariableImage',
   'updateVariableImage',
   'enterPreview',
   'exitPreview',
   'isPreviewing',
+  'getHiddenPreviewCount',
   'refreshPreview',
   'getVariableMeta',
+  'getSchemaAdapter',
+  'setSchemaAdapter',
+  'ensureSchemaLoaded',
+  'setVariableSchema',
+  'getVariableSchema',
+  'addCustomVariable',
+  'updateCustomVariable',
+  'removeCustomVariable',
+  'isImportedVariable',
+  'setSchemaEditable',
+  'isSchemaEditable',
+  'saveVariableSchema',
+  'exportVariableSchema',
 ];
 VariablePlugin.events = [
   'variable:delimiterChange',
   'variable:testDataChange',
   'variable:previewChange',
+  'variable:schemaChange',
 ];
 
 export default VariablePlugin;
