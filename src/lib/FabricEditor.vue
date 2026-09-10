@@ -21,6 +21,15 @@
               <!-- <PreviewCurrent /> -->
               <Clear v-if="showSaveButton" />
               <Save v-if="showSaveButton" />
+              <Button
+                v-if="showSaveButton"
+                class="fe-save-btn"
+                type="primary"
+                icon="md-checkmark"
+                @click="onSaveRequest"
+              >
+                {{ t('save.submit') }}
+              </Button>
             </div>
           </div>
         </slot>
@@ -353,6 +362,13 @@ export default {
     // ---- 保存按钮显隐 ----
     const showSaveButton = computed(() => props.options.showSaveButton !== false);
 
+    // ---- 保存 ----
+    // 顶栏保存按钮：向业务壳抛出最小化 JSON，持久化归业务
+    // （业务监听 save-request 落库；PosterEditorHost 场景则回写交接信封）
+    const onSaveRequest = () => {
+      emit('save-request', { json: editor.getJson() });
+    };
+
     onMounted(() => {
       initCanvas();
       if (instance && instance.proxy) instance.proxy.api = api;
@@ -365,6 +381,7 @@ export default {
     provideEditorContext(ctx);
 
     return {
+      t,
       canvasId,
       state,
       activeTab,
@@ -375,6 +392,7 @@ export default {
       toggleLeft,
       // toggleRuler,
       showSaveButton,
+      onSaveRequest,
       api,
     };
   },

@@ -86,6 +86,7 @@
   "save": {
     "empty": "清空",
     "down": "下载",
+    "submit": "保存",
     "save_as_picture": "PNG图片",
     "copy_to_clipboard": "复制到剪切板",
     "save_as_json": "保存为JSON",

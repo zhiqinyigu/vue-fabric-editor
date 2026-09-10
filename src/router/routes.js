@@ -39,6 +39,14 @@ const routes = [
     path: '/legacy-demo',
     component: () => import('@/views/legacy-demo/index.vue'),
   },
+  {
+    path: '/poster-entry-demo',
+    component: () => import('@/views/poster-entry-demo/index.vue'),
+  },
+  {
+    path: '/poster-editor-demo',
+    component: () => import('@/views/poster-entry-demo/editor.vue'),
+  },
 ];
 
 export default routes;

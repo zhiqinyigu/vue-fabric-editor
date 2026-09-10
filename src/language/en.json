@@ -86,6 +86,7 @@
   "save": {
     "empty": "Clear",
     "down": "Download",
+    "submit": "Save",
     "save_as_picture": "PNG image",
     "copy_to_clipboard": "Copy to clipboard",
     "save_as_json": "Save as JSON",
