@@ -20,7 +20,7 @@ import {
 import { computeBackgroundLayout, replaceTilePatternSource } from '../workspaceGeometry';
 
 class VariablePlugin {
-  constructor(canvas, editor, options) {
+  constructor(canvas, editor) {
     this.canvas = canvas;
     this.editor = editor;
     this.delimiter = { ...DEFAULT_DELIMITER };
@@ -340,21 +340,17 @@ class VariablePlugin {
       }
       const variableSrc = typeof _object.src === 'string' ? _object.src : '';
       const placeholder = self._makePlaceholder(variableSrc);
-      originalFromObject.call(
-        this,
-        { ..._object, src: placeholder },
-        (instance, isError) => {
-          if (!isError && instance) {
-            instance.set('src', variableSrc);
-            instance.set('isVariableImage', true);
-            instance.set('variableLabel', self._extractVariableLabel(variableSrc));
-            // 恢复变量图片的矢量叠加层渲染（type 保持 image）
-            self._attachVariableOverlay(instance);
-            self._patchGetSrc(instance);
-          }
-          callback && callback(instance, isError);
+      originalFromObject.call(this, { ..._object, src: placeholder }, (instance, isError) => {
+        if (!isError && instance) {
+          instance.set('src', variableSrc);
+          instance.set('isVariableImage', true);
+          instance.set('variableLabel', self._extractVariableLabel(variableSrc));
+          // 恢复变量图片的矢量叠加层渲染（type 保持 image）
+          self._attachVariableOverlay(instance);
+          self._patchGetSrc(instance);
         }
-      );
+        callback && callback(instance, isError);
+      });
       return undefined;
     };
   }
@@ -644,7 +640,12 @@ class VariablePlugin {
           };
           if (!(imgSize.w > 0) || !(imgSize.h > 0)) return;
           const ws = this.canvas.getObjects().find((o) => o && o.id === 'workspace');
-          const layout = computeBackgroundLayout({ workspace: ws, imageSize: imgSize, mode, position });
+          const layout = computeBackgroundLayout({
+            workspace: ws,
+            imageSize: imgSize,
+            mode,
+            position,
+          });
           if (layout) obj.set(layout);
           obj.setElement(imgEl);
         }
@@ -769,7 +770,9 @@ class VariablePlugin {
     const options = { ...(obj.get('extension') || {}) };
     let raw;
     try {
-      raw = isQr ? plugin._getBase64Str(plugin._paramsToOption(options)) : plugin._getBase64Str(options);
+      raw = isQr
+        ? plugin._getBase64Str(plugin._paramsToOption(options))
+        : plugin._getBase64Str(options);
     } catch (e) {
       this.canvas.requestRenderAll();
       return;

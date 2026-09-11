@@ -6,101 +6,98 @@
  * @Description: 拖拽插件
  */
 export class DringPlugin {
-    constructor(canvas, editor) {
-        this.canvas = canvas;
-        this.editor = editor;
-        this.defautOption = {};
-        this.hotkeys = ['space'];
-        this.dragMode = false;
-        this.dragMode = false;
-        this.init();
-    }
-    init() {
-        this._initDring();
-    }
-    startDring() {
-        this.dragMode = true;
-        this.canvas.setCursor('grab');
-        this.editor.emit('startDring');
-        this.canvas.renderAll();
-    }
-    endDring() {
-        this.dragMode = false;
-        this.canvas.setCursor('default');
-        this.canvas.isDragging = false;
-        this.editor.emit('endDring');
-        this.canvas.renderAll();
-    }
-    // 拖拽模式;
-    _initDring() {
-        const This = this;
-        this.canvas.on('mouse:down', function (opt) {
-            const evt = opt.e;
-            // evt.button === 1 为鼠标中键的判断
-            if (evt.altKey || This.dragMode || evt.button === 1) {
-                This.canvas.setCursor('grabbing');
-                This.canvas.discardActiveObject();
-                This._setDring();
-                this.selection = false;
-                this.isDragging = true;
-                this.lastPosX = evt.clientX;
-                this.lastPosY = evt.clientY;
-                this.requestRenderAll();
-            }
-        });
-        this.canvas.on('mouse:move', function (opt) {
-            This.dragMode && This.canvas.setCursor('grab');
-            if (this.isDragging) {
-                This.canvas.discardActiveObject();
-                This.canvas.setCursor('grabbing');
-                const { e } = opt;
-                if (!this.viewportTransform)
-                    return;
-                const vpt = this.viewportTransform;
-                vpt[4] += e.clientX - this.lastPosX;
-                vpt[5] += e.clientY - this.lastPosY;
-                this.lastPosX = e.clientX;
-                this.lastPosY = e.clientY;
-                this.requestRenderAll();
-            }
-        });
-        this.canvas.on('mouse:up', function () {
-            if (!this.viewportTransform)
-                return;
-            this.setViewportTransform(this.viewportTransform);
-            this.isDragging = false;
-            this.selection = true;
-            this.getObjects().forEach((obj) => {
-                if (obj.id !== 'workspace' && obj.hasControls) {
-                    obj.selectable = true;
-                }
-            });
-            This.dragMode && This.canvas.setCursor('grab');
-            this.requestRenderAll();
-        });
-    }
-    _setDring() {
-        this.canvas.selection = false;
-        this.canvas.getObjects().forEach((obj) => {
-            obj.selectable = false;
-        });
-        this.canvas.requestRenderAll();
-    }
-    destroy() {
-        console.log('pluginDestroy');
-    }
-    // 快捷键扩展回调
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    hotkeyEvent(eventName, e) {
-        if (e.code === 'Space' && e.type === 'keydown') {
-            if (!this.dragMode) {
-                this.startDring();
-            }
+  constructor(canvas, editor) {
+    this.canvas = canvas;
+    this.editor = editor;
+    this.defautOption = {};
+    this.hotkeys = ['space'];
+    this.dragMode = false;
+    this.dragMode = false;
+    this.init();
+  }
+  init() {
+    this._initDring();
+  }
+  startDring() {
+    this.dragMode = true;
+    this.canvas.setCursor('grab');
+    this.editor.emit('startDring');
+    this.canvas.renderAll();
+  }
+  endDring() {
+    this.dragMode = false;
+    this.canvas.setCursor('default');
+    this.canvas.isDragging = false;
+    this.editor.emit('endDring');
+    this.canvas.renderAll();
+  }
+  // 拖拽模式;
+  _initDring() {
+    const This = this;
+    this.canvas.on('mouse:down', function (opt) {
+      const evt = opt.e;
+      // evt.button === 1 为鼠标中键的判断
+      if (evt.altKey || This.dragMode || evt.button === 1) {
+        This.canvas.setCursor('grabbing');
+        This.canvas.discardActiveObject();
+        This._setDring();
+        this.selection = false;
+        this.isDragging = true;
+        this.lastPosX = evt.clientX;
+        this.lastPosY = evt.clientY;
+        this.requestRenderAll();
+      }
+    });
+    this.canvas.on('mouse:move', function (opt) {
+      This.dragMode && This.canvas.setCursor('grab');
+      if (this.isDragging) {
+        This.canvas.discardActiveObject();
+        This.canvas.setCursor('grabbing');
+        const { e } = opt;
+        if (!this.viewportTransform) return;
+        const vpt = this.viewportTransform;
+        vpt[4] += e.clientX - this.lastPosX;
+        vpt[5] += e.clientY - this.lastPosY;
+        this.lastPosX = e.clientX;
+        this.lastPosY = e.clientY;
+        this.requestRenderAll();
+      }
+    });
+    this.canvas.on('mouse:up', function () {
+      if (!this.viewportTransform) return;
+      this.setViewportTransform(this.viewportTransform);
+      this.isDragging = false;
+      this.selection = true;
+      this.getObjects().forEach((obj) => {
+        if (obj.id !== 'workspace' && obj.hasControls) {
+          obj.selectable = true;
         }
-        if (e.code === 'Space' && e.type === 'keyup') {
-            this.endDring();
-        }
+      });
+      This.dragMode && This.canvas.setCursor('grab');
+      this.requestRenderAll();
+    });
+  }
+  _setDring() {
+    this.canvas.selection = false;
+    this.canvas.getObjects().forEach((obj) => {
+      obj.selectable = false;
+    });
+    this.canvas.requestRenderAll();
+  }
+  destroy() {
+    console.log('pluginDestroy');
+  }
+  // 快捷键扩展回调
+  hotkeyEvent(eventName, e) {
+    if (e.code === 'Space' && e.type === 'keydown') {
+      if (!this.dragMode) {
+        this.startDring();
+      }
     }
+    if (e.code === 'Space' && e.type === 'keyup') {
+      this.endDring();
+    }
+  }
 }
 DringPlugin.pluginName = 'DringPlugin';
 DringPlugin.events = ['startDring', 'endDring'];

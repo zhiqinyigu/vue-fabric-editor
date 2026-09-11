@@ -34,11 +34,17 @@ function makeCanvas() {
 
 function drawFreePath(canvas, plugin, onCreated) {
   plugin.startTextPathDraw({ onCreated });
-  const path = new fabric.Path([['M', 0, 0], ['L', 100, 0]], {
-    fill: null,
-    stroke: '#000000',
-    strokeWidth: 2,
-  });
+  const path = new fabric.Path(
+    [
+      ['M', 0, 0],
+      ['L', 100, 0],
+    ],
+    {
+      fill: null,
+      stroke: '#000000',
+      strokeWidth: 2,
+    }
+  );
   path.segmentsInfo = fabric.util.getPathSegmentsInfo(path.path);
   canvas.fire('before:path:created', { path });
   canvas.fire('path:created', { path });
@@ -52,20 +58,67 @@ function recordingCtx() {
     canvas: { getAttribute: () => 'ltr', setAttribute() {} },
     measureText: (t) => ({ width: String(t).length * 200 }),
     calls,
-    save() { calls.push(['save']); }, restore() { calls.push(['restore']); },
-    translate(x, y) { calls.push(['translate', x, y]); }, rotate(a) { calls.push(['rotate', a]); },
-    beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, fill() {}, closePath() {},
-    bezierCurveTo() {}, quadraticCurveTo() {}, arc() {}, arcTo() {},
-    fillText() { calls.push(['fillText']); }, strokeText() {},
-    set fillStyle(v) {}, get fillStyle() { return ''; },
-    set strokeStyle(v) {}, get strokeStyle() { return ''; },
-    set font(v) {}, get font() { return ''; },
-    set textAlign(v) {}, get textAlign() { return 'left'; },
-    set textBaseline(v) {}, get textBaseline() { return 'alphabetic'; },
-    set globalAlpha(v) {}, get globalAlpha() { return 1; },
-    set lineWidth(v) {}, get lineWidth() { return 1; },
-    rect() {}, transform() {}, scale() {}, setTransform() {}, setLineDash() {},
-    createLinearGradient: () => ({ addColorStop() {} }), createPattern: () => ({}),
+    save() {
+      calls.push(['save']);
+    },
+    restore() {
+      calls.push(['restore']);
+    },
+    translate(x, y) {
+      calls.push(['translate', x, y]);
+    },
+    rotate(a) {
+      calls.push(['rotate', a]);
+    },
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    stroke() {},
+    fill() {},
+    closePath() {},
+    bezierCurveTo() {},
+    quadraticCurveTo() {},
+    arc() {},
+    arcTo() {},
+    fillText() {
+      calls.push(['fillText']);
+    },
+    strokeText() {},
+    set fillStyle(v) {},
+    get fillStyle() {
+      return '';
+    },
+    set strokeStyle(v) {},
+    get strokeStyle() {
+      return '';
+    },
+    set font(v) {},
+    get font() {
+      return '';
+    },
+    set textAlign(v) {},
+    get textAlign() {
+      return 'left';
+    },
+    set textBaseline(v) {},
+    get textBaseline() {
+      return 'alphabetic';
+    },
+    set globalAlpha(v) {},
+    get globalAlpha() {
+      return 1;
+    },
+    set lineWidth(v) {},
+    get lineWidth() {
+      return 1;
+    },
+    rect() {},
+    transform() {},
+    scale() {},
+    setTransform() {},
+    setLineDash() {},
+    createLinearGradient: () => ({ addColorStop() {} }),
+    createPattern: () => ({}),
   };
 }
 
@@ -95,7 +148,9 @@ function replacePath(textObj, d) {
   const dy = curTop - path.top;
   if (dx || dy) {
     const shifted = path.path.map((seg) =>
-      seg.map((v, idx) => (idx === 0 ? v : typeof v === 'number' ? v + (idx % 2 === 1 ? dx : dy) : v))
+      seg.map((v, idx) =>
+        idx === 0 ? v : typeof v === 'number' ? v + (idx % 2 === 1 ? dx : dy) : v
+      )
     );
     path._setPath(shifted);
   }
@@ -110,13 +165,23 @@ describe('PathTextPlugin 路径文字', () => {
     const canvas = makeCanvas();
     const plugin = new PathTextPlugin(canvas, null);
     let created = null;
-    plugin.startTextPathDraw({ onCreated: (t) => { created = t; } });
-    expect(canvas.isDrawingMode).toBe(true);
-    const path = new fabric.Path([['M', 0, 0], ['L', 100, 0]], {
-      fill: null,
-      stroke: '#000000',
-      strokeWidth: 2,
+    plugin.startTextPathDraw({
+      onCreated: (t) => {
+        created = t;
+      },
     });
+    expect(canvas.isDrawingMode).toBe(true);
+    const path = new fabric.Path(
+      [
+        ['M', 0, 0],
+        ['L', 100, 0],
+      ],
+      {
+        fill: null,
+        stroke: '#000000',
+        strokeWidth: 2,
+      }
+    );
     path.segmentsInfo = fabric.util.getPathSegmentsInfo(path.path);
     canvas.fire('before:path:created', { path });
     canvas.fire('path:created', { path });
@@ -161,7 +226,9 @@ describe('PathTextPlugin 路径文字', () => {
     const canvas = makeCanvas();
     const plugin = new PathTextPlugin(canvas, null);
     let created = null;
-    drawFreePath(canvas, plugin, (t) => { created = t; });
+    drawFreePath(canvas, plugin, (t) => {
+      created = t;
+    });
     const json = JSON.stringify(created.toObject());
     fabric.IText.fromObject(JSON.parse(json), (restored) => {
       expect(restored.type).toBe('i-text');
@@ -176,7 +243,9 @@ describe('PathTextPlugin 路径文字', () => {
     const canvas = makeCanvas();
     const plugin = new PathTextPlugin(canvas, null);
     let created = null;
-    drawFreePath(canvas, plugin, (t) => { created = t; });
+    drawFreePath(canvas, plugin, (t) => {
+      created = t;
+    });
     const before = created.path.path.slice();
     const newData = fabric.util.parsePath('M 0 100 C 30 120 70 160 120 80');
     created.path._setPath(newData);
@@ -190,7 +259,13 @@ describe('PathTextPlugin 路径文字', () => {
 
   it('替换路径：文本保持位置且从新路径起点开始（修复起点偏移）', () => {
     const d = 'm 8.946 9.158 c 94.822 378.133,381.024 134.717,494.348 488.567';
-    const oldPath = new fabric.Path([['M', 0, 0], ['L', 100, 0]], { fill: null, stroke: '#000', strokeWidth: 2 });
+    const oldPath = new fabric.Path(
+      [
+        ['M', 0, 0],
+        ['L', 100, 0],
+      ],
+      { fill: null, stroke: '#000', strokeWidth: 2 }
+    );
     oldPath.segmentsInfo = fabric.util.getPathSegmentsInfo(oldPath.path);
     const tb = new fabric.IText('hello', { fontSize: 20, top: 300, left: 400, path: oldPath });
     tb.initDimensions();
@@ -204,7 +279,10 @@ describe('PathTextPlugin 路径文字', () => {
     expect(tb.path.top).toBeCloseTo(tb.top, 3);
     // 首字符与路径 M 点对齐（半字宽内，mock 字宽 10px）
     const mAbs = fabric.util.transformPoint(
-      new fabric.Point(tb.path.path[0][1] - tb.path.pathOffset.x, tb.path.path[0][2] - tb.path.pathOffset.y),
+      new fabric.Point(
+        tb.path.path[0][1] - tb.path.pathOffset.x,
+        tb.path.path[0][2] - tb.path.pathOffset.y
+      ),
       tb.path.calcTransformMatrix()
     );
     const c = firstCharAbs(tb);
@@ -253,4 +331,3 @@ describe('PathTextPlugin 路径文字', () => {
     expect(centerAfter[5]).toBeCloseTo(centerBefore[5], 6);
   });
 });
-

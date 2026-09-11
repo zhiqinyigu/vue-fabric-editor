@@ -34,8 +34,6 @@
 <script>
 import { ref, onMounted } from '@vue/composition-api';
 
-const baseURL = process.env.VUE_APP_APIHOST;
-
 export default {
   name: 'ImportJson',
   props: {

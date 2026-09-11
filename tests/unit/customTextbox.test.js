@@ -10,21 +10,60 @@ function makeCtx() {
   const ctx = {
     canvas: { getAttribute: () => 'ltr', setAttribute() {} },
     measureText: (t) => ({ width: String(t).length * 200 }),
-    save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
-    fill() {}, closePath() {}, translate() {}, rotate() {}, scale() {}, transform() {},
-    fillRect() {}, strokeRect() {}, clearRect() {}, rect() {}, arc() {},
-    setTransform() {}, setLineDash() {}, fillText() {}, strokeText() {},
+    save() {},
+    restore() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    stroke() {},
+    fill() {},
+    closePath() {},
+    translate() {},
+    rotate() {},
+    scale() {},
+    transform() {},
+    fillRect() {},
+    strokeRect() {},
+    clearRect() {},
+    rect() {},
+    arc() {},
+    setTransform() {},
+    setLineDash() {},
+    fillText() {},
+    strokeText() {},
     createLinearGradient: () => ({ addColorStop() {} }),
     createPattern: () => ({}),
     getImageData: () => ({ data: new Uint8ClampedArray(4) }),
-    putImageData() {}, drawImage() {},
-    set fillStyle(v) {}, get fillStyle() { return ''; },
-    set strokeStyle(v) {}, get strokeStyle() { return ''; },
-    set font(v) {}, get font() { return ''; },
-    set textAlign(v) {}, get textAlign() { return 'left'; },
-    set textBaseline(v) {}, get textBaseline() { return 'alphabetic'; },
-    set globalAlpha(v) {}, get globalAlpha() { return 1; },
-    set lineWidth(v) {}, get lineWidth() { return 1; },
+    putImageData() {},
+    drawImage() {},
+    set fillStyle(v) {},
+    get fillStyle() {
+      return '';
+    },
+    set strokeStyle(v) {},
+    get strokeStyle() {
+      return '';
+    },
+    set font(v) {},
+    get font() {
+      return '';
+    },
+    set textAlign(v) {},
+    get textAlign() {
+      return 'left';
+    },
+    set textBaseline(v) {},
+    get textBaseline() {
+      return 'alphabetic';
+    },
+    set globalAlpha(v) {},
+    get globalAlpha() {
+      return 1;
+    },
+    set lineWidth(v) {},
+    get lineWidth() {
+      return 1;
+    },
   };
   ctx.clip = jest.fn();
   ctx.rect = jest.fn();
@@ -354,7 +393,13 @@ describe('textbox 尺寸锁 / 省略号 / 自定义手柄', () => {
     ];
     for (const angle of [0, 30, 120, 300]) {
       for (const [handle, aOX, aOY, px, py] of cases) {
-        const tb = new fabric.Textbox(TEXT, { width: 100, fontSize: 20, left: 200, top: 200, angle });
+        const tb = new fabric.Textbox(TEXT, {
+          width: 100,
+          fontSize: 20,
+          left: 200,
+          top: 200,
+          angle,
+        });
         tb.set({ clipEnabled: true });
         tb.syncFrame();
         const oldAnchor = tb.translateToOriginPoint(tb.getCenterPoint(), aOX, aOY);

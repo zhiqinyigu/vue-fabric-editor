@@ -6,7 +6,7 @@ import { Message } from 'view-design';
 import 'view-design/dist/styles/iview.css';
 import './styles/index.less';
 import VueLazyload from 'vue-lazyload';
-// 鑷畾涔夊瓧浣撴枃浠?// 自定义字体文件
+// 自定义字体文件
 import '@/assets/fonts/font.css';
 
 import { VueMasonryPlugin } from 'vue-masonry';

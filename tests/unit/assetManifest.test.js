@@ -16,13 +16,45 @@ describe('ServersPlugin 资源清单（asset manifest）', () => {
   it('重复 src 提升为 assets，唯一 src 保持内联', () => {
     const json = {
       objects: [
-        { type: 'image', left: 0, top: 0, width: 10, height: 10, src: 'https://x.com/dup.png', id: 'a' },
-        { type: 'image', left: 20, top: 0, width: 10, height: 10, src: 'https://x.com/dup.png', id: 'b' },
-        { type: 'image', left: 40, top: 0, width: 10, height: 10, src: 'https://x.com/unique.png', id: 'c' },
+        {
+          type: 'image',
+          left: 0,
+          top: 0,
+          width: 10,
+          height: 10,
+          src: 'https://x.com/dup.png',
+          id: 'a',
+        },
+        {
+          type: 'image',
+          left: 20,
+          top: 0,
+          width: 10,
+          height: 10,
+          src: 'https://x.com/dup.png',
+          id: 'b',
+        },
+        {
+          type: 'image',
+          left: 40,
+          top: 0,
+          width: 10,
+          height: 10,
+          src: 'https://x.com/unique.png',
+          id: 'c',
+        },
         {
           type: 'group',
           objects: [
-            { type: 'image', left: 0, top: 0, width: 5, height: 5, src: 'https://x.com/dup.png', id: 'd' },
+            {
+              type: 'image',
+              left: 0,
+              top: 0,
+              width: 5,
+              height: 5,
+              src: 'https://x.com/dup.png',
+              id: 'd',
+            },
           ],
         },
       ],
@@ -44,7 +76,15 @@ describe('ServersPlugin 资源清单（asset manifest）', () => {
   it('无重复 src 时不生成 assets', () => {
     const json = {
       objects: [
-        { type: 'image', left: 0, top: 0, width: 10, height: 10, src: 'https://x.com/a.png', id: 'a' },
+        {
+          type: 'image',
+          left: 0,
+          top: 0,
+          width: 10,
+          height: 10,
+          src: 'https://x.com/a.png',
+          id: 'a',
+        },
       ],
     };
     makePlugin()._applyAssetManifest(json);

@@ -73,7 +73,12 @@ const workspace = new MockObj({ id: 'workspace', type: 'rect' });
 const rect = new MockObj({ id: 'rect1', type: 'rect', name: '矩形' });
 const childA = new MockObj({ id: 'childA', type: 'i-text', text: '文字A' });
 const childB = new MockObj({ id: 'childB', type: 'image', name: '图片B' });
-const group = new MockObj({ id: 'group1', type: 'group', name: '组合', children: [childA, childB] });
+const group = new MockObj({
+  id: 'group1',
+  type: 'group',
+  name: '组合',
+  children: [childA, childB],
+});
 const img = new MockObj({ id: 'img1', type: 'image', name: '大图' });
 
 let activeObject = null;

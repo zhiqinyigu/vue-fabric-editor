@@ -36,7 +36,11 @@ export default defineComponent({
     prop: 'modelValue',
     event: 'update:modelValue',
   },
-  props: ['modelValue'],
+  props: {
+    modelValue: {
+      type: Number,
+    },
+  },
   setup(props, { emit }) {
     const num = ref(90);
     const numInput = ref(null);

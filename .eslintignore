@@ -1,0 +1,7 @@
+# 类型声明与类型冒烟用例：由 tsc 校验（npm run typecheck），不交给 eslint
+# （仓库未接 @typescript-eslint，eslint 解析 .ts 会报 parse error）
+types/
+tests/types/
+
+# 构建产物
+dist/

@@ -20,7 +20,7 @@ import { computeAutoGrowSize } from '../variableEngine';
 const EDIT_DEBOUNCE_MS = 150;
 
 class AutoGrowPlugin {
-  constructor(canvas, editor, options) {
+  constructor(canvas, editor) {
     this.canvas = canvas;
     this.editor = editor;
     // 编辑态几何快照：{ [id]: { top, bottom } }，bottom = top + height（originY='top' 语义）
@@ -55,7 +55,7 @@ class AutoGrowPlugin {
     });
     this.canvas.on('object:removed', (e) => this._removeDesignMap(e.target));
     // 编辑态：文本内容输入过程中防抖增高（粘贴/输入长文本时海报实时跟随）
-    this.canvas.on('text:changed', (e) => {
+    this.canvas.on('text:changed', () => {
       this._cancelDebounce();
       this._debounceTimer = setTimeout(() => {
         this._debounceTimer = null;

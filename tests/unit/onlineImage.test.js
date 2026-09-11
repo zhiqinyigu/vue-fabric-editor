@@ -18,11 +18,13 @@ function makeImageElement(src = URL) {
   Object.defineProperty(el, 'naturalHeight', { value: 100, writable: true, configurable: true });
   Object.defineProperty(el, 'complete', { value: true, writable: true, configurable: true });
   // 模拟 fabric.loadImage 在 anonymous 跨域加载后设置在元素上的 crossOrigin
-  Object.defineProperty(el, 'crossOrigin', { value: 'anonymous', writable: true, configurable: true });
+  Object.defineProperty(el, 'crossOrigin', {
+    value: 'anonymous',
+    writable: true,
+    configurable: true,
+  });
   return el;
 }
-
-
 
 describe('在线图片导出 / 恢复', () => {
   it('toObject 导出在线 URL（而非 base64），并携带 crossOrigin', () => {

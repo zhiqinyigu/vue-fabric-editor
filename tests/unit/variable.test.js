@@ -212,8 +212,16 @@ describe('变量图片预览：真实图缩放到占位框显示尺寸（改 sca
       if (!isPlaceholder) {
         Object.defineProperty(el, 'width', { value: 768, writable: true, configurable: true });
         Object.defineProperty(el, 'height', { value: 1366, writable: true, configurable: true });
-        Object.defineProperty(el, 'naturalWidth', { value: 768, writable: true, configurable: true });
-        Object.defineProperty(el, 'naturalHeight', { value: 1366, writable: true, configurable: true });
+        Object.defineProperty(el, 'naturalWidth', {
+          value: 768,
+          writable: true,
+          configurable: true,
+        });
+        Object.defineProperty(el, 'naturalHeight', {
+          value: 1366,
+          writable: true,
+          configurable: true,
+        });
       }
       cb.call(thisArg, el, false);
     });
@@ -321,7 +329,10 @@ describe('变量图片预览：真实图缩放到占位框显示尺寸（改 sca
         height: img.height,
       };
       // 占位图（scale=1）设置阴影：blur=20, offset=(10,10)
-      img.set('shadow', new fabric.Shadow({ color: 'rgba(0,0,0,0.5)', blur: 20, offsetX: 10, offsetY: 10 }));
+      img.set(
+        'shadow',
+        new fabric.Shadow({ color: 'rgba(0,0,0,0.5)', blur: 20, offsetX: 10, offsetY: 10 })
+      );
       const shadow = img.shadow;
       // fabric _setShadow：shadowBlur ∝ (scaleX+scaleY)/4、offset ∝ scale。
       // 真实图 scale 缩至 (240/768, 160/1366)，补偿因子使渲染后阴影 = 占位图编辑态阴影。
@@ -381,7 +392,10 @@ describe('变量图片预览：真实图缩放到占位框显示尺寸（改 sca
       img.set('clipPath', clip);
       // 组合矩阵 = 对象变换 × clip 变换（fabric 渲染 clip 的坐标系）
       const comboOf = () =>
-        fabric.util.multiplyTransformMatrices(img.calcTransformMatrix(), clip.calcTransformMatrix());
+        fabric.util.multiplyTransformMatrices(
+          img.calcTransformMatrix(),
+          clip.calcTransformMatrix()
+        );
       // 占位图基线（scale=1）
       const baseCombo = comboOf();
       const baseObjCx = img.left + img.width / 2;
@@ -660,7 +674,14 @@ describe('VariableImage 矢量叠加层：type 保持 image，任意缩放文字
 
   it('预览加载真实图关闭叠加层，退出预览恢复占位图重新打开', (done) => {
     plugin.createVariableImage(VAR_URL).then((img) => {
-      const original = { left: 10, top: 20, scaleX: 1, scaleY: 1, width: img.width, height: img.height };
+      const original = {
+        left: 10,
+        top: 20,
+        scaleX: 1,
+        scaleY: 1,
+        width: img.width,
+        height: img.height,
+      };
       // 预览：加载真实图 → 关闭叠加层
       plugin._reloadImageSrc(img, 'https://cdn.example.com/real.png', original);
       expect(img.get('showPlaceholderText')).toBe(false);
@@ -733,7 +754,9 @@ describe('computeAutoGrowSize：海报根据文字内容自适应增高', () => 
   });
 
   it('无 autoGrow / follow 时返回设计高与空 updates', () => {
-    const { height, updates } = computeAutoGrowSize([{ id: 'a', top: 0, height: 10 }], { designHeight: 800 });
+    const { height, updates } = computeAutoGrowSize([{ id: 'a', top: 0, height: 10 }], {
+      designHeight: 800,
+    });
     expect(height).toBe(800);
     expect(updates).toEqual([]);
   });
@@ -878,11 +901,14 @@ describe('变量预览：进入预览锁定元素编辑，退出预览恢复交�
   });
 });
 
-
 describe('二维码/条形码变量：extension 子字段收集与渲染（引擎侧）', () => {
   it('getVariableFieldOfObject 识别 qrcode/barcode 扩展字段', () => {
-    expect(getVariableFieldOfObject({ type: 'image', extensionType: 'qrcode' })).toEqual(['extension.data']);
-    expect(getVariableFieldOfObject({ type: 'image', extensionType: 'barcode' })).toEqual(['extension.value']);
+    expect(getVariableFieldOfObject({ type: 'image', extensionType: 'qrcode' })).toEqual([
+      'extension.data',
+    ]);
+    expect(getVariableFieldOfObject({ type: 'image', extensionType: 'barcode' })).toEqual([
+      'extension.value',
+    ]);
     // 普通图片仍按 src 处理（回归）
     expect(getVariableFieldOfObject({ type: 'image' })).toEqual(['src']);
     expect(getVariableFieldOfObject({ type: 'textbox' })).toEqual(['text']);
@@ -891,7 +917,11 @@ describe('二维码/条形码变量：extension 子字段收集与渲染（引�
   it('extractVariables 从 qrcode extension.data / barcode extension.value 收集变量', () => {
     const json = {
       objects: [
-        { type: 'image', extensionType: 'qrcode', extension: { data: 'https://x.com/{{user.id}}' } },
+        {
+          type: 'image',
+          extensionType: 'qrcode',
+          extension: { data: 'https://x.com/{{user.id}}' },
+        },
         { type: 'image', extensionType: 'barcode', extension: { value: '{{order.code}}' } },
         { type: 'image', src: '{{logo.url}}' },
       ],
@@ -903,7 +933,11 @@ describe('二维码/条形码变量：extension 子字段收集与渲染（引�
   it('renderObjects 渲染 qrcode/barcode 的 extension 内容', () => {
     const json = {
       objects: [
-        { type: 'image', extensionType: 'qrcode', extension: { data: 'https://x.com/{{user.id}}' } },
+        {
+          type: 'image',
+          extensionType: 'qrcode',
+          extension: { data: 'https://x.com/{{user.id}}' },
+        },
         { type: 'image', extensionType: 'barcode', extension: { value: '{{order.code}}' } },
       ],
     };
@@ -917,9 +951,7 @@ describe('二维码/条形码变量：extension 子字段收集与渲染（引�
       objects: [
         {
           type: 'group',
-          objects: [
-            { type: 'image', extensionType: 'qrcode', extension: { data: '{{user.id}}' } },
-          ],
+          objects: [{ type: 'image', extensionType: 'qrcode', extension: { data: '{{user.id}}' } }],
         },
       ],
     };
@@ -996,7 +1028,10 @@ describe('VariablePlugin 二维码/条形码预览', () => {
         _paramsToOption: (o) => o,
         _getBase64Str: () => Promise.resolve('data:image/png;base64,preview-qr'),
       };
-      const editorMock = { emit: () => {}, getPlugin: (name) => (name === 'QrCodePlugin' ? qrPluginMock : null) };
+      const editorMock = {
+        emit: () => {},
+        getPlugin: (name) => (name === 'QrCodePlugin' ? qrPluginMock : null),
+      };
       const p = new VariablePlugin(makeCanvas([img]), editorMock);
       p.setTestData({ 'user.id': '123' });
 
@@ -1026,12 +1061,17 @@ describe('VariablePlugin 二维码/条形码预览', () => {
   });
 });
 
-
 describe('AutoGrowPlugin 编辑态实时增高（文本变长海报跟随）', () => {
   // 设计态：海报 600x800；笔记(note, autoGrow) top=300 height=100（bottom=400）；
   // 页脚(footer) follow=note top=450（gap=50）。构造函数自动重建几何快照。
   function setup({ previewing = false } = {}) {
-    const workspace = new fabric.Rect({ id: 'workspace', left: 0, top: 0, width: 600, height: 800 });
+    const workspace = new fabric.Rect({
+      id: 'workspace',
+      left: 0,
+      top: 0,
+      width: 600,
+      height: 800,
+    });
     const note = new fabric.Textbox('短文本', { id: 'note', left: 100, top: 300, width: 300 });
     note.set({ height: 100, autoGrow: true });
     const footer = new fabric.Rect({ id: 'footer', left: 0, top: 450, width: 600, height: 40 });
@@ -1068,7 +1108,18 @@ describe('AutoGrowPlugin 编辑态实时增高（文本变长海报跟随）', (
     };
 
     const plugin = new AutoGrowPlugin(canvas, editor);
-    return { plugin, canvas, editor, workspace, note, footer, canvasHandlers, editorHandlers, wsPlugin, previewState };
+    return {
+      plugin,
+      canvas,
+      editor,
+      workspace,
+      note,
+      footer,
+      canvasHandlers,
+      editorHandlers,
+      wsPlugin,
+      previewState,
+    };
   }
 
   afterEach(() => {
@@ -1100,7 +1151,7 @@ describe('AutoGrowPlugin 编辑态实时增高（文本变长海报跟随）', (
   });
 
   it('手动拖拽 follow 元素：新位置落为基准，不被吸附回原位', () => {
-    const { canvasHandlers, workspace, note, footer, wsPlugin } = setup();
+    const { canvasHandlers, workspace, note, footer } = setup();
     // 先让锚点内容变高：页脚保距下移
     note.set({ height: 600 });
     canvasHandlers['object:modified']({ target: note });
@@ -1151,7 +1202,13 @@ describe('AutoGrowPlugin 编辑态实时增高（文本变长海报跟随）', (
 
   it('链式跟随：页脚跟笔记、点缀跟页脚，编辑态一并下移', () => {
     const { plugin, canvas, workspace, note, footer, canvasHandlers, wsPlugin } = setup();
-    const decoration = new fabric.Rect({ id: 'decoration', left: 0, top: 500, width: 600, height: 40 });
+    const decoration = new fabric.Rect({
+      id: 'decoration',
+      left: 0,
+      top: 500,
+      width: 600,
+      height: 40,
+    });
     decoration.set({ follow: 'footer' });
     canvas.getObjects = () => [workspace, note, footer, decoration];
     plugin._rebuildDesignMap(); // 收录点缀 {500,540}
@@ -1167,7 +1224,13 @@ describe('AutoGrowPlugin 编辑态实时增高（文本变长海报跟随）', (
 
   it('拖拽其它元素（非锚点、非 follow）：点缀图保持原位不被位移', () => {
     const { plugin, canvas, workspace, note, footer, canvasHandlers, wsPlugin } = setup();
-    const decoration = new fabric.Rect({ id: 'decoration', left: 0, top: 500, width: 600, height: 40 });
+    const decoration = new fabric.Rect({
+      id: 'decoration',
+      left: 0,
+      top: 500,
+      width: 600,
+      height: 40,
+    });
     decoration.set({ follow: 'footer' });
     const box = new fabric.Rect({ id: 'box', left: 0, top: 700, width: 600, height: 60 });
     canvas.getObjects = () => [workspace, note, footer, decoration, box];
@@ -1184,7 +1247,13 @@ describe('AutoGrowPlugin 编辑态实时增高（文本变长海报跟随）', (
 
   it('拖拽其它元素后再次拖拽：点缀图不会累积下移', () => {
     const { plugin, canvas, workspace, note, footer, canvasHandlers } = setup();
-    const decoration = new fabric.Rect({ id: 'decoration', left: 0, top: 500, width: 600, height: 40 });
+    const decoration = new fabric.Rect({
+      id: 'decoration',
+      left: 0,
+      top: 500,
+      width: 600,
+      height: 40,
+    });
     decoration.set({ follow: 'footer' });
     const box = new fabric.Rect({ id: 'box', left: 0, top: 700, width: 600, height: 60 });
     canvas.getObjects = () => [workspace, note, footer, decoration, box];
@@ -1224,7 +1293,13 @@ describe('AutoGrowPlugin 编辑态实时增高（文本变长海报跟随）', (
 
   it('编辑态拉伸点缀图（scaleY=2）：海报按实际渲染高度增高', () => {
     const { plugin, canvas, workspace, note, footer, canvasHandlers, wsPlugin } = setup();
-    const decoration = new fabric.Rect({ id: 'decoration', left: 0, top: 760, width: 600, height: 40 });
+    const decoration = new fabric.Rect({
+      id: 'decoration',
+      left: 0,
+      top: 760,
+      width: 600,
+      height: 40,
+    });
     decoration.set({ follow: 'footer' });
     canvas.getObjects = () => [workspace, note, footer, decoration];
     plugin._rebuildDesignMap(); // 收录点缀 {760, 800}
@@ -1238,7 +1313,13 @@ describe('AutoGrowPlugin 编辑态实时增高（文本变长海报跟随）', (
 
   it('预览态拉伸点缀图：applyAutoGrow 按实际渲染高度增高', () => {
     const { plugin, canvas, workspace, note, footer, editorHandlers, previewState } = setup();
-    const decoration = new fabric.Rect({ id: 'decoration', left: 0, top: 760, width: 600, height: 40 });
+    const decoration = new fabric.Rect({
+      id: 'decoration',
+      left: 0,
+      top: 760,
+      width: 600,
+      height: 40,
+    });
     decoration.set({ follow: 'footer' });
     canvas.getObjects = () => [workspace, note, footer, decoration];
     plugin._rebuildDesignMap(); // 收录点缀 {760, 800}
@@ -1252,8 +1333,6 @@ describe('AutoGrowPlugin 编辑态实时增高（文本变长海报跟随）', (
     expect(workspace.get('height')).toBe(840);
   });
 });
-
-
 
 describe('背景图模板变量（image / rect+Pattern 双形态）', () => {
   function makeVarBgJson(mode) {
@@ -1283,19 +1362,20 @@ describe('背景图模板变量（image / rect+Pattern 双形态）', () => {
             src: '{{user.bg}}',
           };
     return {
-      objects: [
-        { type: 'rect', id: 'workspace', left: 0, top: 0, width: 600, height: 800 },
-        bg,
-      ],
+      objects: [{ type: 'rect', id: 'workspace', left: 0, top: 0, width: 600, height: 800 }, bg],
     };
   }
 
   it('getVariableFieldOfObject：背景 image 形态返回 src', () => {
-    expect(getVariableFieldOfObject({ id: 'backgroundImage', type: 'image', src: '{{a}}' })).toEqual(['src']);
+    expect(
+      getVariableFieldOfObject({ id: 'backgroundImage', type: 'image', src: '{{a}}' })
+    ).toEqual(['src']);
   });
 
   it('getVariableFieldOfObject：背景 rect（tile）形态返回 src（type 判断会漏掉）', () => {
-    expect(getVariableFieldOfObject({ id: 'backgroundImage', type: 'rect', src: '{{a}}' })).toEqual(['src']);
+    expect(getVariableFieldOfObject({ id: 'backgroundImage', type: 'rect', src: '{{a}}' })).toEqual(
+      ['src']
+    );
   });
 
   it('extractVariables 收集背景变量（image 与 rect.fill.source 均命中）', () => {

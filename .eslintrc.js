@@ -5,11 +5,7 @@ module.exports = {
     es2021: true,
     jest: true,
   },
-  extends: [
-    'plugin:vue/recommended',
-    'eslint:recommended',
-    'plugin:prettier/recommended',
-  ],
+  extends: ['plugin:vue/recommended', 'eslint:recommended', 'plugin:prettier/recommended'],
   parserOptions: {
     parser: 'babel-eslint',
     ecmaVersion: 2021,
@@ -33,7 +29,9 @@ module.exports = {
         ignores: ['keep-alive', 'router-view', 'transition-group', 'component', 'i-*', '/^i[A-Z]/'],
       },
     ],
-    'no-unused-vars': 'warn',
+    // h: Vue JSX 渲染函数的 pragma 参数（编译期使用，静态检查看不到）
+    // _ 前缀: 明确不需要使用的形参
+    'no-unused-vars': ['warn', { argsIgnorePattern: '^_|^h$' }],
     'no-console': 'off',
   },
   overrides: [

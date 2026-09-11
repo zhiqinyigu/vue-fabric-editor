@@ -87,7 +87,7 @@
 
 <script>
 import { ref, reactive, onMounted } from '@vue/composition-api';
-import { Input, Spin, Modal, Message } from 'view-design';
+import { Input, Modal, Message } from 'view-design';
 
 // 组件
 import FileType from './components/FileType.vue';

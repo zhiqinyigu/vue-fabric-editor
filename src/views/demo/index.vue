@@ -14,9 +14,9 @@
 import { ref } from '@vue/composition-api';
 import { Message } from 'view-design';
 import FabricEditor from '@/lib';
-import templateExtension, { templateAdapter } from '../../../examples/template-extension';
-import onlineImageExtension from '../../../examples/online-image';
-import aiToolsExtension from '../../../examples/ai-tools-extension';
+import templateExtension, { templateAdapter } from '@/examples/template-extension';
+import onlineImageExtension from '@/examples/online-image';
+import aiToolsExtension from '@/examples/ai-tools-extension';
 
 export default {
   name: 'DemoApp',

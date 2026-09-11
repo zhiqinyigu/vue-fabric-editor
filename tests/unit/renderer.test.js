@@ -641,7 +641,6 @@ describe('RendererCore autoGrow 增高（与编辑器预览一致）', () => {
   });
 });
 
-
 describe('RendererCore 变量背景（替换后按真实尺寸渲染 / 失败语义）', () => {
   function makeVarBgPoster(bgSrc, data) {
     const json = {
@@ -712,7 +711,7 @@ describe('RendererCore 变量背景（替换后按真实尺寸渲染 / 失败语
     mock.mockRestore();
   });
 
-it('变量值 URL 加载失败（非空 src）→ emit renderer:error', async () => {
+  it('变量值 URL 加载失败（非空 src）→ emit renderer:error', async () => {
     const mock = mockLoadImageBroken();
     const { core } = createRenderer();
     const onError = jest.fn();

@@ -30,7 +30,7 @@
     <!-- 搜索分页列表 -->
     <PageList
       v-if="filters.material_type.$contains || filters.name.$contains"
-      DOMId="materialList"
+      domId="materialList"
       :pageListApi="getMaterials"
       :filters="filters"
       :formatData="formatData"

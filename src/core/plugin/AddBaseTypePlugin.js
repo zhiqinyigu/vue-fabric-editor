@@ -9,116 +9,118 @@ import { fabric } from 'fabric';
 import { v4 as uuid } from 'uuid';
 import { appendCacheBustParam } from '../assetUrl';
 class AddBaseTypePlugin {
-    constructor(canvas, editor) {
-        this.canvas = canvas;
-        this.editor = editor;
-        this.editor = editor;
-        this.canvas = canvas;
+  constructor(canvas, editor) {
+    this.canvas = canvas;
+    this.editor = editor;
+    this.editor = editor;
+    this.canvas = canvas;
+  }
+  addBaseType(item, optons) {
+    const { event = false, center = true } = optons || {};
+    item.set({
+      id: uuid(),
+    });
+    // 超出画布80%时等比缩小，否则保持原始尺寸
+    this._fitOverflow(item);
+    event && this._toEvent(item, event);
+    this.canvas.add(item);
+    if (!event && center) {
+      this._toCenter(item);
     }
-    addBaseType(item, optons) {
-        const { event = false, center = true } = optons || {};
-        item.set({
-            id: uuid(),
+    this.canvas.setActiveObject(item);
+    this.canvas.renderAll();
+    this.editor.saveState();
+  }
+  _toEvent(item, event) {
+    const { left, top } = this.canvas.getSelectionElement().getBoundingClientRect();
+    if (event.x < left || event.y < top || item.width === undefined) return;
+    const point = {
+      x: event.x - left,
+      y: event.y - top,
+    };
+    const pointerVpt = this.canvas.restorePointerVpt(point);
+    item.set({
+      left: pointerVpt.x,
+      top: pointerVpt.y,
+    });
+  }
+  _toCenter(item) {
+    this.canvas.setActiveObject(item);
+    this.editor.position('center');
+  }
+  // 超出画布80%时等比缩小（默认保持原始尺寸）
+  _fitOverflow(item) {
+    if (item.width === undefined || item.height === undefined) {
+      return;
+    }
+    const workspace = this.editor.getWorkspase();
+    if (!workspace) {
+      return;
+    }
+    const maxWidth = workspace.getScaledWidth() * 0.8;
+    const maxHeight = workspace.getScaledHeight() * 0.8;
+    const ratio = Math.min(maxWidth / item.getScaledWidth(), maxHeight / item.getScaledHeight());
+    if (ratio < 1) {
+      item.scaleX *= ratio;
+      item.scaleY *= ratio;
+    }
+  }
+  createImgByElement(target) {
+    // URL 含模板变量时，改走变量占位图（真实 src 保留变量 URL）
+    const vp = this.editor.getPlugin('VariablePlugin');
+    if (vp && vp.containsVariable && vp.containsVariable(target.src)) {
+      return vp.createVariableImage(target.src);
+    }
+    return new Promise((resolve, reject) => {
+      const imgType = this.getImageExtension(target.src);
+      if (imgType === 'svg') {
+        fabric.loadSVGFromURL(target.src, (objects) => {
+          if (!objects || objects.length === 0) {
+            reject(new Error('SVG 图片加载失败，请检查地址与跨域(CORS)设置'));
+            return;
+          }
+          const item = fabric.util.groupSVGElements(objects, {
+            shadow: '',
+            fontFamily: 'arial',
+            name: 'svg元素',
+          });
+          resolve(item);
         });
-        // 超出画布80%时等比缩小，否则保持原始尺寸
-        this._fitOverflow(item);
-        event && this._toEvent(item, event);
-        this.canvas.add(item);
-        if (!event && center) {
-            this._toCenter(item);
-        }
-        this.canvas.setActiveObject(item);
-        this.canvas.renderAll();
-        this.editor.saveState();
-    }
-    _toEvent(item, event) {
-        const { left, top } = this.canvas.getSelectionElement().getBoundingClientRect();
-        if (event.x < left || event.y < top || item.width === undefined)
-            return;
-        const point = {
-            x: event.x - left,
-            y: event.y - top,
-        };
-        const pointerVpt = this.canvas.restorePointerVpt(point);
-        item.set({
-            left: pointerVpt.x,
-            top: pointerVpt.y,
-        });
-    }
-    _toCenter(item) {
-        this.canvas.setActiveObject(item);
-        this.editor.position('center');
-    }
-    // 超出画布80%时等比缩小（默认保持原始尺寸）
-    _fitOverflow(item) {
-        if (item.width === undefined || item.height === undefined) {
-            return;
-        }
-        const workspace = this.editor.getWorkspase();
-        if (!workspace) {
-            return;
-        }
-        const maxWidth = workspace.getScaledWidth() * 0.8;
-        const maxHeight = workspace.getScaledHeight() * 0.8;
-        const ratio = Math.min(maxWidth / item.getScaledWidth(), maxHeight / item.getScaledHeight());
-        if (ratio < 1) {
-            item.scaleX *= ratio;
-            item.scaleY *= ratio;
-        }
-    }
-    createImgByElement(target) {
-        // URL 含模板变量时，改走变量占位图（真实 src 保留变量 URL）
-        const vp = this.editor.getPlugin('VariablePlugin');
-        if (vp && vp.containsVariable && vp.containsVariable(target.src)) {
-            return vp.createVariableImage(target.src);
-        }
-        return new Promise((resolve, reject) => {
-            const imgType = this.getImageExtension(target.src);
-            if (imgType === 'svg') {
-                fabric.loadSVGFromURL(target.src, (objects) => {
-                    if (!objects || objects.length === 0) {
-                        reject(new Error('SVG 图片加载失败，请检查地址与跨域(CORS)设置'));
-                        return;
-                    }
-                    const item = fabric.util.groupSVGElements(objects, {
-                        shadow: '',
-                        fontFamily: 'arial',
-                        name: 'svg元素',
-                    });
-                    resolve(item);
-                });
+      } else {
+        // 请求 URL 追加「按接入域名分片缓存」参数（幂等；对象 src 存请求态 URL，保存时统一移除）
+        const requestUrl = appendCacheBustParam(
+          target.src,
+          this.editor && this.editor.options && this.editor.options.cacheBust
+        );
+        fabric.Image.fromURL(
+          requestUrl,
+          (imgEl, isError) => {
+            if (isError) {
+              reject(new Error('图片加载失败，请检查地址与跨域(CORS)设置'));
+              return;
             }
-            else {
-                // 请求 URL 追加「按接入域名分片缓存」参数（幂等；对象 src 存请求态 URL，保存时统一移除）
-                const requestUrl = appendCacheBustParam(
-                    target.src,
-                    this.editor && this.editor.options && this.editor.options.cacheBust
-                );
-                fabric.Image.fromURL(requestUrl, (imgEl, isError) => {
-                    if (isError) {
-                        reject(new Error('图片加载失败，请检查地址与跨域(CORS)设置'));
-                        return;
-                    }
-                    resolve(imgEl);
-                }, { crossOrigin: 'anonymous' });
-            }
-        });
+            resolve(imgEl);
+          },
+          { crossOrigin: 'anonymous' }
+        );
+      }
+    });
+  }
+  getImageExtension(imageUrl) {
+    // 去除查询参数与 hash，兼容带参数的在线图片地址，避免扩展名误判
+    const cleanUrl = (imageUrl || '').split('?')[0].split('#')[0];
+    const pathParts = cleanUrl.split('/');
+    const filename = pathParts[pathParts.length - 1];
+    const fileParts = filename.split('.');
+    // 仅当确实存在扩展名时才返回，否则视为无扩展名（如 data URL、纯路径地址）
+    if (fileParts.length > 1) {
+      return fileParts[fileParts.length - 1].toLowerCase();
     }
-    getImageExtension(imageUrl) {
-        // 去除查询参数与 hash，兼容带参数的在线图片地址，避免扩展名误判
-        const cleanUrl = (imageUrl || '').split('?')[0].split('#')[0];
-        const pathParts = cleanUrl.split('/');
-        const filename = pathParts[pathParts.length - 1];
-        const fileParts = filename.split('.');
-        // 仅当确实存在扩展名时才返回，否则视为无扩展名（如 data URL、纯路径地址）
-        if (fileParts.length > 1) {
-            return fileParts[fileParts.length - 1].toLowerCase();
-        }
-        return '';
-    }
-    destroy() {
-        console.log('pluginDestroy');
-    }
+    return '';
+  }
+  destroy() {
+    console.log('pluginDestroy');
+  }
 }
 AddBaseTypePlugin.pluginName = 'AddBaseTypePlugin';
 AddBaseTypePlugin.apis = ['addBaseType', 'createImgByElement'];

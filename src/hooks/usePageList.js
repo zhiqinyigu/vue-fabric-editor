@@ -132,7 +132,10 @@ const getMaterialInfoUrl = (info) => {
 
 const getMaterialPreviewUrl = (info) => {
   const formats = info && info.data && info.data.attributes && info.data.attributes.formats;
-  const imgUrl = (formats && formats.small && formats.small.url) || (info && info.data && info.data.attributes && info.data.attributes.url) || '';
+  const imgUrl =
+    (formats && formats.small && formats.small.url) ||
+    (info && info.data && info.data.attributes && info.data.attributes.url) ||
+    '';
   return APIHOST + imgUrl;
 };
 

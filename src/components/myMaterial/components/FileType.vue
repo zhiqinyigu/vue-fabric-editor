@@ -29,6 +29,7 @@
 
 <script>
 import { ref } from '@vue/composition-api';
+// eslint-disable-next-line no-unused-vars -- 模板中 `:src="fileTypeIcon"` 使用（eslint 静态检查看不到 SFC 模板引用）
 import fileTypeIcon from '@/assets/icon/fileType.png';
 import useMaterial from '@/hooks/useMaterial';
 

@@ -210,7 +210,6 @@ describe('WorkspacePlugin 背景图对齐（backgroundPosition 数值系数）',
   });
 });
 
-
 describe('WorkspacePlugin 变量背景（setBackgroundVariableImage 分流 / 守卫）', () => {
   function makeVarSetup() {
     const base = setup({ withBg: false });

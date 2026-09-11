@@ -52,22 +52,65 @@ function makeCtx() {
   return {
     canvas: { getAttribute: () => 'ltr', setAttribute() {} },
     measureText: (t) => ({ width: String(t).length * 200 }),
-    save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
-    bezierCurveTo() {}, quadraticCurveTo() {}, arcTo() {}, ellipse() {},
-    fill() {}, closePath() {}, translate() {}, rotate() {}, scale() {}, transform() {},
-    fillRect() {}, strokeRect() {}, clearRect() {}, clip() {}, rect() {}, arc() {},
-    setTransform() {}, setLineDash() {}, fillText() {}, strokeText() {},
+    save() {},
+    restore() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    stroke() {},
+    fill() {},
+    closePath() {},
+    translate() {},
+    rotate() {},
+    scale() {},
+    transform() {},
+    fillRect() {},
+    strokeRect() {},
+    clearRect() {},
+    clip() {},
+    rect() {},
+    arc() {},
+    bezierCurveTo() {},
+    quadraticCurveTo() {},
+    arcTo() {},
+    ellipse() {},
+    setTransform() {},
+    setLineDash() {},
+    fillText() {},
+    strokeText() {},
     createLinearGradient: () => ({ addColorStop() {} }),
     createPattern: () => ({}),
     getImageData: () => ({ data: new Uint8ClampedArray(4) }),
-    putImageData() {}, drawImage() {},
-    set fillStyle(v) {}, get fillStyle() { return ''; },
-    set strokeStyle(v) {}, get strokeStyle() { return ''; },
-    set font(v) {}, get font() { return ''; },
-    set textAlign(v) {}, get textAlign() { return 'left'; },
-    set textBaseline(v) {}, get textBaseline() { return 'alphabetic'; },
-    set globalAlpha(v) {}, get globalAlpha() { return 1; },
-    set lineWidth(v) {}, get lineWidth() { return 1; },
+    putImageData() {},
+    drawImage() {},
+    set fillStyle(v) {},
+    get fillStyle() {
+      return '';
+    },
+    set strokeStyle(v) {},
+    get strokeStyle() {
+      return '';
+    },
+    set font(v) {},
+    get font() {
+      return '';
+    },
+    set textAlign(v) {},
+    get textAlign() {
+      return 'left';
+    },
+    set textBaseline(v) {},
+    get textBaseline() {
+      return 'alphabetic';
+    },
+    set globalAlpha(v) {},
+    get globalAlpha() {
+      return 1;
+    },
+    set lineWidth(v) {},
+    get lineWidth() {
+      return 1;
+    },
   };
 }
 

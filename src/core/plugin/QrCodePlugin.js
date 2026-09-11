@@ -10,118 +10,125 @@ import { generateQrCodeDataURL, qrParamsToOption } from '../generators';
 // 二维码生成参数
 var DotsType;
 (function (DotsType) {
-    DotsType["rounded"] = "rounded";
-    DotsType["dots"] = "dots";
-    DotsType["classy"] = "classy";
-    DotsType["classy_rounded"] = "classy-rounded";
-    DotsType["square"] = "square";
-    DotsType["extra_rounded"] = "extra-rounded";
+  DotsType['rounded'] = 'rounded';
+  DotsType['dots'] = 'dots';
+  DotsType['classy'] = 'classy';
+  DotsType['classy_rounded'] = 'classy-rounded';
+  DotsType['square'] = 'square';
+  DotsType['extra_rounded'] = 'extra-rounded';
 })(DotsType || (DotsType = {}));
 var CornersType;
 (function (CornersType) {
-    CornersType["dot"] = "dot";
-    CornersType["square"] = "square";
-    CornersType["extra_rounded"] = "extra-rounded";
+  CornersType['dot'] = 'dot';
+  CornersType['square'] = 'square';
+  CornersType['extra_rounded'] = 'extra-rounded';
 })(CornersType || (CornersType = {}));
 var cornersDotType;
 (function (cornersDotType) {
-    cornersDotType["dot"] = "dot";
-    cornersDotType["square"] = "square";
+  cornersDotType['dot'] = 'dot';
+  cornersDotType['square'] = 'square';
 })(cornersDotType || (cornersDotType = {}));
 var errorCorrectionLevelType;
 (function (errorCorrectionLevelType) {
-    errorCorrectionLevelType["L"] = "L";
-    errorCorrectionLevelType["M"] = "M";
-    errorCorrectionLevelType["Q"] = "Q";
-    errorCorrectionLevelType["H"] = "H";
+  errorCorrectionLevelType['L'] = 'L';
+  errorCorrectionLevelType['M'] = 'M';
+  errorCorrectionLevelType['Q'] = 'Q';
+  errorCorrectionLevelType['H'] = 'H';
 })(errorCorrectionLevelType || (errorCorrectionLevelType = {}));
 class QrCodePlugin {
-    constructor(canvas, editor, options = {}) {
-        this.canvas = canvas;
-        this.editor = editor;
-        this.options = options;
+  constructor(canvas, editor, options = {}) {
+    this.canvas = canvas;
+    this.editor = editor;
+    this.options = options;
+  }
+  async hookTransform(object) {
+    if (object.extensionType === 'qrcode') {
+      // 无参数（或旧数据仅有 src）时保留现有 src，避免渲染失败
+      if (!object.extension || typeof object.extension.data !== 'string') return;
+      const paramsOption = this._paramsToOption(object.extension);
+      const url = await this._getBase64Str(paramsOption);
+      object.src = url;
     }
-    async hookTransform(object) {
-        if (object.extensionType === 'qrcode') {
-            // 无参数（或旧数据仅有 src）时保留现有 src，避免渲染失败
-            if (!object.extension || typeof object.extension.data !== 'string') return;
-            const paramsOption = this._paramsToOption(object.extension);
-            const url = await this._getBase64Str(paramsOption);
-            object.src = url;
-        }
+  }
+  async _getBase64Str(options) {
+    return generateQrCodeDataURL(options);
+  }
+  _defaultBarcodeOption() {
+    const defaultData = (this.options && this.options.defaultData) || 'https://example.com';
+    return {
+      data: defaultData,
+      width: 300,
+      margin: 10,
+      errorCorrectionLevel: 'M',
+      dotsColor: '#000000',
+      dotsType: 'rounded',
+      cornersSquareColor: '#000000',
+      cornersSquareType: 'square',
+      cornersDotColor: '#000000',
+      cornersDotType: 'square',
+      background: '#ffffff',
+    };
+  }
+  _paramsToOption(option) {
+    return qrParamsToOption(option);
+  }
+  async addQrCode() {
+    const option = this._defaultBarcodeOption();
+    const paramsOption = this._paramsToOption(option);
+    const url = await this._getBase64Str(paramsOption);
+    fabric.Image.fromURL(
+      url,
+      (imgEl) => {
+        imgEl.set({
+          extensionType: 'qrcode',
+          extension: option,
+        });
+        imgEl.scaleToWidth(this.editor.getWorkspase().getScaledWidth() / 2);
+        this.canvas.add(imgEl);
+        this.canvas.setActiveObject(imgEl);
+        this.editor.position('center');
+        this.canvas.renderAll();
+        this.editor.saveState();
+      },
+      { crossOrigin: 'anonymous' }
+    );
+  }
+  async setQrCode(option) {
+    try {
+      const paramsOption = this._paramsToOption(option);
+      const url = await this._getBase64Str(paramsOption);
+      const activeObject = this.canvas.getActiveObjects()[0];
+      fabric.Image.fromURL(
+        url,
+        (imgEl) => {
+          imgEl.set({
+            left: activeObject.left,
+            top: activeObject.top,
+            extensionType: 'qrcode',
+            extension: { ...option },
+          });
+          imgEl.scaleToWidth(activeObject.getScaledWidth());
+          this.editor.del();
+          this.canvas.add(imgEl);
+          this.canvas.setActiveObject(imgEl);
+        },
+        { crossOrigin: 'anonymous' }
+      );
+    } catch (error) {
+      console.log(error);
     }
-    async _getBase64Str(options) {
-        return generateQrCodeDataURL(options);
-    }
-    _defaultBarcodeOption() {
-        const defaultData = (this.options && this.options.defaultData) || 'https://example.com';
-        return {
-            data: defaultData,
-            width: 300,
-            margin: 10,
-            errorCorrectionLevel: 'M',
-            dotsColor: '#000000',
-            dotsType: 'rounded',
-            cornersSquareColor: '#000000',
-            cornersSquareType: 'square',
-            cornersDotColor: '#000000',
-            cornersDotType: 'square',
-            background: '#ffffff',
-        };
-    }
-    _paramsToOption(option) {
-        return qrParamsToOption(option);
-    }
-    async addQrCode() {
-        const option = this._defaultBarcodeOption();
-        const paramsOption = this._paramsToOption(option);
-        const url = await this._getBase64Str(paramsOption);
-        fabric.Image.fromURL(url, (imgEl) => {
-            imgEl.set({
-                extensionType: 'qrcode',
-                extension: option,
-            });
-            imgEl.scaleToWidth(this.editor.getWorkspase().getScaledWidth() / 2);
-            this.canvas.add(imgEl);
-            this.canvas.setActiveObject(imgEl);
-            this.editor.position('center');
-            this.canvas.renderAll();
-            this.editor.saveState();
-        }, { crossOrigin: 'anonymous' });
-    }
-    async setQrCode(option) {
-        try {
-            const paramsOption = this._paramsToOption(option);
-            const url = await this._getBase64Str(paramsOption);
-            const activeObject = this.canvas.getActiveObjects()[0];
-            fabric.Image.fromURL(url, (imgEl) => {
-                imgEl.set({
-                    left: activeObject.left,
-                    top: activeObject.top,
-                    extensionType: 'qrcode',
-                    extension: { ...option },
-                });
-                imgEl.scaleToWidth(activeObject.getScaledWidth());
-                this.editor.del();
-                this.canvas.add(imgEl);
-                this.canvas.setActiveObject(imgEl);
-            }, { crossOrigin: 'anonymous' });
-        }
-        catch (error) {
-            console.log(error);
-        }
-    }
-    getQrCodeTypes() {
-        return {
-            DotsType: Object.values(DotsType),
-            CornersType: Object.values(CornersType),
-            cornersDotType: Object.values(cornersDotType),
-            errorCorrectionLevelType: Object.values(errorCorrectionLevelType),
-        };
-    }
-    destroy() {
-        console.log('pluginDestroy');
-    }
+  }
+  getQrCodeTypes() {
+    return {
+      DotsType: Object.values(DotsType),
+      CornersType: Object.values(CornersType),
+      cornersDotType: Object.values(cornersDotType),
+      errorCorrectionLevelType: Object.values(errorCorrectionLevelType),
+    };
+  }
+  destroy() {
+    console.log('pluginDestroy');
+  }
 }
 QrCodePlugin.pluginName = 'QrCodePlugin';
 QrCodePlugin.apis = ['addQrCode', 'setQrCode', 'getQrCodeTypes'];

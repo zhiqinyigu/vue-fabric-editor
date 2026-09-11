@@ -38,7 +38,8 @@ export function createExtensionManager({ registry, ui }) {
 
   function register(ext) {
     if (!ext || !ext.id) throw new Error('[fabric-editor] extension requires an id');
-    if (store.has(ext.id)) throw new Error(`[fabric-editor] extension "${ext.id}" already registered`);
+    if (store.has(ext.id))
+      throw new Error(`[fabric-editor] extension "${ext.id}" already registered`);
     const disposers = [];
     Object.keys(ext.services || {}).forEach((key) => {
       disposers.push(registry.register(key, ext.services[key]));

@@ -1,9 +1,14 @@
 import { fabric } from 'fabric';
 import '../../src/core/objects/CustomTextbox';
 
-function show(label, tb) {
-  const lines = tb._textLines.map((l) => l.join('')).join(' | ');
-  console.log(`${label} frameH=${tb.frameHeight} h=${tb.height} w=${tb.width} lh=${tb.getHeightOfLine(0).toFixed(2)} => ${lines}`);
+// 诊断输出已关闭（需要时取消注释下面的日志）
+function show(_label, _tb) {
+  // const lines = _tb._textLines.map((l) => l.join('')).join(' | ');
+  // console.log(
+  //   `${_label} frameH=${_tb.frameHeight} h=${_tb.height} w=${_tb.width} lh=${_tb
+  //     .getHeightOfLine(0)
+  //     .toFixed(2)} => ${lines}`
+  // );
 }
 
 it('diag: sequential drag 1.5 -> <1 line on SAME textbox', () => {

@@ -8,10 +8,10 @@
 
 <template>
   <!-- 列表 -->
-  <div :id="props.DOMId" class="page-list-box" style="height: calc(100vh - 100px)">
+  <div :id="props.domId" class="page-list-box" style="height: calc(100vh - 100px)">
     <Scroll
       v-if="showScroll"
-      :key="props.DOMId"
+      :key="props.domId"
       :on-reach-bottom="nextPage"
       :height="scrollHeight"
       :distance-to-edge="[-1, -1]"
@@ -52,7 +52,7 @@ export default {
     filters: {
       type: Object,
     },
-    DOMId: {
+    domId: {
       type: String,
       default: '',
     },
@@ -74,7 +74,7 @@ export default {
       startGetList,
       nextPage,
     } = usePageList({
-      el: '#' + props.DOMId,
+      el: '#' + props.domId,
       apiClient: props.pageListApi,
       filters: props.filters,
       sort,

@@ -333,7 +333,12 @@ class WorkspacePlugin {
           this.backgroundImageVariable = false;
           return;
         }
-        const bgObj = createBackgroundObject({ img: imgEl, layout, mode, position: this.backgroundImagePosition });
+        const bgObj = createBackgroundObject({
+          img: imgEl,
+          layout,
+          mode,
+          position: this.backgroundImagePosition,
+        });
         bgObj.set('src', dataUrl);
         bgObj.set('isVariableBackground', true);
         bgObj.set('variableLabel', vp._extractVariableLabel(dataUrl));

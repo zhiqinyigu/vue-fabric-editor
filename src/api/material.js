@@ -25,8 +25,7 @@ export const getMaterialTypes = () => instance.get('/api/material-types');
 export const getMaterials = (data) => instance.get('/api/materials?' + data);
 
 // 获取根据分类获取素材
-export const getMaterialsByType = (data) =>
-  instance.get('/api/materials?' + qs.stringify(data));
+export const getMaterialsByType = (data) => instance.get('/api/materials?' + qs.stringify(data));
 
 // 获取字体分类分类
 export const getFontStyleTypes = () => instance.get('/api/font-style-types');

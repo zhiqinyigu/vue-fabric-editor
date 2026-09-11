@@ -74,8 +74,7 @@ export const getTmplInfo = (data) => instance.get(`/api/user-templs/${data}`);
 export const createFileType = (data) => instance.post(`/api/user-templs`, data);
 
 // 查询文件分类列表
-export const getFileTypeList = (data) =>
-  instance.get(`/api/user-templs?${JSON.stringify(data)}`);
+export const getFileTypeList = (data) => instance.get(`/api/user-templs?${JSON.stringify(data)}`);
 
 // 获取用户树菜单
 export const getUserFileTypeTree = () => instance.get(`/api/user-templ/getUerFileTypeTree`);

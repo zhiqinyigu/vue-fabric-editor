@@ -30,7 +30,7 @@
     <!-- 搜索分页列表 -->
     <PageList
       v-if="filters.font_style_type.$contains || filters.name.$contains"
-      DOMId="fontMaterialList"
+      domId="fontMaterialList"
       :pageListApi="getFontStyles"
       :filters="filters"
       :formatData="formatData"

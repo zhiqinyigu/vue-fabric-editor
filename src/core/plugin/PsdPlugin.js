@@ -9,36 +9,36 @@ import { selectFiles } from '../utils/utils';
 import psdToJson from '../utils/psd';
 import Psd from '@webtoon/psd';
 class PsdPlugin {
-    constructor(canvas, editor) {
-        this.canvas = canvas;
-        this.editor = editor;
-    }
-    insertPSD(callback) {
-        return new Promise((resolve, reject) => {
-            selectFiles({ accept: '.psd' })
-                .then((files) => {
-                if (files && files.length > 0) {
-                    const file = files[0];
-                    const reader = new FileReader();
-                    reader.readAsText(file, 'UTF-8');
-                    reader.onload = async () => {
-                        const result = await file.arrayBuffer();
-                        // 解析PSD文件
-                        const psdFile = Psd.parse(result);
-                        console.log(psdFile, '11111');
-                        const json = await psdToJson(psdFile);
-                        // 加载json
-                        this.loadJSON(json, callback);
-                        resolve('');
-                    };
-                }
-            })
-                .catch(reject);
-        });
-    }
-    loadJSON(json, callback) {
-        this.editor.loadJSON(json, callback);
-    }
+  constructor(canvas, editor) {
+    this.canvas = canvas;
+    this.editor = editor;
+  }
+  insertPSD(callback) {
+    return new Promise((resolve, reject) => {
+      selectFiles({ accept: '.psd' })
+        .then((files) => {
+          if (files && files.length > 0) {
+            const file = files[0];
+            const reader = new FileReader();
+            reader.readAsText(file, 'UTF-8');
+            reader.onload = async () => {
+              const result = await file.arrayBuffer();
+              // 解析PSD文件
+              const psdFile = Psd.parse(result);
+              console.log(psdFile, '11111');
+              const json = await psdToJson(psdFile);
+              // 加载json
+              this.loadJSON(json, callback);
+              resolve('');
+            };
+          }
+        })
+        .catch(reject);
+    });
+  }
+  loadJSON(json, callback) {
+    this.editor.loadJSON(json, callback);
+  }
 }
 PsdPlugin.pluginName = 'PsdPlugin';
 PsdPlugin.apis = ['insertPSD'];

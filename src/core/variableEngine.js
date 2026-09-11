@@ -45,7 +45,8 @@ function getVariableFieldOfObject(obj) {
 // 背景图（tile 形态）的 Pattern 仅是派生渲染结果，其 source 与 src 保持一致；
 // 收集/渲染时与 src 同步替换（base64 无变量则原样保留）
 function getBackgroundPatternSource(obj) {
-  if (!obj || obj.id !== 'backgroundImage' || !obj.fill || typeof obj.fill.source !== 'string') return null;
+  if (!obj || obj.id !== 'backgroundImage' || !obj.fill || typeof obj.fill.source !== 'string')
+    return null;
   return obj.fill.source;
 }
 
@@ -312,7 +313,8 @@ function computeAutoGrowSize(objects, opts) {
       const design = designMap[id];
       const anchorDesign = designMap[anchorId];
       const designTopEdge = design && design.top != null ? design.top : getTopEdge(o);
-      const anchorDesignBottom = anchorDesign && anchorDesign.bottom != null ? anchorDesign.bottom : getTopEdge(o);
+      const anchorDesignBottom =
+        anchorDesign && anchorDesign.bottom != null ? anchorDesign.bottom : getTopEdge(o);
       const gap = designTopEdge - anchorDesignBottom;
       const newTopEdge = anchorNewBottom + gap;
       resolvedTopEdge.set(id, newTopEdge);

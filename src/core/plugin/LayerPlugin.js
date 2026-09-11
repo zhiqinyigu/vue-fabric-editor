@@ -6,90 +6,90 @@
  * @Description: 图层调整插件
  */
 class LayerPlugin {
-    constructor(canvas, editor) {
-        this.canvas = canvas;
-        this.editor = editor;
+  constructor(canvas, editor) {
+    this.canvas = canvas;
+    this.editor = editor;
+  }
+  _getWorkspace() {
+    return this.canvas.getObjects().find((item) => item.id === 'workspace');
+  }
+  _workspaceSendToBack() {
+    const workspace = this._getWorkspace();
+    workspace && workspace.sendToBack();
+  }
+  up() {
+    const actives = this.canvas.getActiveObjects();
+    if (actives && actives.length === 1) {
+      const activeObject = this.canvas.getActiveObjects()[0];
+      activeObject && activeObject.bringForward();
+      this.canvas.renderAll();
+      this._workspaceSendToBack();
     }
-    _getWorkspace() {
-        return this.canvas.getObjects().find((item) => item.id === 'workspace');
+  }
+  down() {
+    const actives = this.canvas.getActiveObjects();
+    if (actives && actives.length === 1) {
+      const activeObject = this.canvas.getActiveObjects()[0];
+      activeObject && activeObject.sendBackwards();
+      this.canvas.renderAll();
+      this._workspaceSendToBack();
     }
-    _workspaceSendToBack() {
-        const workspace = this._getWorkspace();
-        workspace && workspace.sendToBack();
+  }
+  toFront() {
+    const actives = this.canvas.getActiveObjects();
+    if (actives && actives.length === 1) {
+      const activeObject = this.canvas.getActiveObjects()[0];
+      activeObject && activeObject.bringToFront();
+      this.canvas.renderAll();
+      this._workspaceSendToBack();
     }
-    up() {
-        const actives = this.canvas.getActiveObjects();
-        if (actives && actives.length === 1) {
-            const activeObject = this.canvas.getActiveObjects()[0];
-            activeObject && activeObject.bringForward();
-            this.canvas.renderAll();
-            this._workspaceSendToBack();
-        }
+  }
+  toBack() {
+    const actives = this.canvas.getActiveObjects();
+    if (actives && actives.length === 1) {
+      const activeObject = this.canvas.getActiveObjects()[0];
+      activeObject && activeObject.sendToBack();
+      this.canvas.renderAll();
+      this._workspaceSendToBack();
     }
-    down() {
-        const actives = this.canvas.getActiveObjects();
-        if (actives && actives.length === 1) {
-            const activeObject = this.canvas.getActiveObjects()[0];
-            activeObject && activeObject.sendBackwards();
-            this.canvas.renderAll();
-            this._workspaceSendToBack();
-        }
+  }
+  contextMenu() {
+    const activeObject = this.canvas.getActiveObject();
+    if (activeObject) {
+      return [
+        {
+          text: '图层管理',
+          hotkey: '❯',
+          subitems: [
+            {
+              text: '上一个',
+              hotkey: '',
+              onclick: () => this.up(),
+            },
+            {
+              text: '下一个',
+              hotkey: '',
+              onclick: () => this.down(),
+            },
+            {
+              text: '置顶',
+              hotkey: '',
+              onclick: () => this.toFront(),
+            },
+            {
+              text: '置底',
+              hotkey: '',
+              onclick: () => this.toBack(),
+            },
+          ],
+        },
+      ];
+      // return [{ text: '复制', hotkey: 'Ctrl+V', disabled: false, onclick: () => this.clone() }];
     }
-    toFront() {
-        const actives = this.canvas.getActiveObjects();
-        if (actives && actives.length === 1) {
-            const activeObject = this.canvas.getActiveObjects()[0];
-            activeObject && activeObject.bringToFront();
-            this.canvas.renderAll();
-            this._workspaceSendToBack();
-        }
-    }
-    toBack() {
-        const actives = this.canvas.getActiveObjects();
-        if (actives && actives.length === 1) {
-            const activeObject = this.canvas.getActiveObjects()[0];
-            activeObject && activeObject.sendToBack();
-            this.canvas.renderAll();
-            this._workspaceSendToBack();
-        }
-    }
-    contextMenu() {
-        const activeObject = this.canvas.getActiveObject();
-        if (activeObject) {
-            return [
-                {
-                    text: '图层管理',
-                    hotkey: '❯',
-                    subitems: [
-                        {
-                            text: '上一个',
-                            hotkey: '',
-                            onclick: () => this.up(),
-                        },
-                        {
-                            text: '下一个',
-                            hotkey: '',
-                            onclick: () => this.down(),
-                        },
-                        {
-                            text: '置顶',
-                            hotkey: '',
-                            onclick: () => this.toFront(),
-                        },
-                        {
-                            text: '置底',
-                            hotkey: '',
-                            onclick: () => this.toBack(),
-                        },
-                    ],
-                },
-            ];
-            // return [{ text: '复制', hotkey: 'Ctrl+V', disabled: false, onclick: () => this.clone() }];
-        }
-    }
-    destroy() {
-        console.log('pluginDestroy');
-    }
+  }
+  destroy() {
+    console.log('pluginDestroy');
+  }
 }
 LayerPlugin.pluginName = 'LayerPlugin';
 LayerPlugin.apis = ['up', 'down', 'toFront', 'toBack'];
