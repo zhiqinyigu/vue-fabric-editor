@@ -298,6 +298,12 @@ export default {
           return;
         }
         const dataUrl = await servers.preview(2);
+        // 画布被跨域图片污染时 preview 返回 null（servers 已 emit save:error）
+        if (!dataUrl) {
+          status.value = '导出失败：画布包含跨域图片';
+          Message.error('导出失败：画布包含跨域图片，无法导出');
+          return;
+        }
         const a = document.createElement('a');
         a.href = dataUrl;
         a.download = 'poster.png';

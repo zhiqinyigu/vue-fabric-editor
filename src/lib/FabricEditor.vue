@@ -279,6 +279,11 @@ export default {
       });
 
       editor.init(canvas);
+      // 导出被跨域图片污染（tainted canvas）拦截 → toast 提示，并转发 save-error 供宿主自定义
+      editor.on('save:error', (err) => {
+        Message.error((err && err.message) || t('save.export_failed'));
+        emit('save-error', err);
+      });
       const fontAdapter = props.adapters.font;
       const sizeAdapter = props.adapters.size;
       editor
@@ -422,6 +427,7 @@ export default {
     display: flex;
     align-items: center;
     gap: 14px;
+    padding-right: 16px;
   }
 }
 

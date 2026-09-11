@@ -8,6 +8,7 @@
 import { fabric } from 'fabric';
 import { throttle } from 'lodash-es';
 import { appendCacheBustParam } from '../assetUrl';
+import { loadImageResilient, normalizeCrossOrigin } from '../imageLoader';
 import { attachVariableOverlay } from '../objects/VariableImage';
 import {
   computeBackgroundLayout,
@@ -265,36 +266,39 @@ class WorkspacePlugin {
       dataUrl,
       this.editor && this.editor.options && this.editor.options.cacheBust
     );
-    const img = new Image();
-    img.onload = () => {
-      const imgW = img.naturalWidth || img.width;
-      const imgH = img.naturalHeight || img.height;
-      if (!imgW || !imgH) {
-        return;
-      }
-      this.backgroundImageSize = { w: imgW, h: imgH };
-      this.backgroundImageDataUrl = dataUrl;
-      const bgObj = this._createBackgroundObject(
-        img,
-        imgW,
-        imgH,
-        workspace,
-        mode,
-        this.backgroundImagePosition
-      );
-      const wsIndex = this.canvas.getObjects().indexOf(workspace);
-      this.canvas.insertAt(bgObj, wsIndex + 1);
-      bgObj.set('opacity', this.backgroundImageOpacity);
-      this.canvas.requestRenderAll();
-      // 显式记录历史（insertAt 仅触发 object:added，HistoryPlugin 不监听该事件）
-      if (this.editor.saveState) {
-        this.editor.saveState();
-      }
-    };
-    img.onerror = () => {
-      console.error('背景图加载失败');
-    };
-    img.src = requestUrl;
+    // CORS 回退加载：服务器无 Access-Control-* 时去掉 crossOrigin 重试（保显示，代价是画布被污染）
+    const crossOrigin = normalizeCrossOrigin(
+      this.editor && this.editor.options ? this.editor.options.crossOrigin : undefined
+    );
+    loadImageResilient(requestUrl, { crossOrigin })
+      .then((img) => {
+        const imgW = img.naturalWidth || img.width;
+        const imgH = img.naturalHeight || img.height;
+        if (!imgW || !imgH) {
+          return;
+        }
+        this.backgroundImageSize = { w: imgW, h: imgH };
+        this.backgroundImageDataUrl = dataUrl;
+        const bgObj = this._createBackgroundObject(
+          img,
+          imgW,
+          imgH,
+          workspace,
+          mode,
+          this.backgroundImagePosition
+        );
+        const wsIndex = this.canvas.getObjects().indexOf(workspace);
+        this.canvas.insertAt(bgObj, wsIndex + 1);
+        bgObj.set('opacity', this.backgroundImageOpacity);
+        this.canvas.requestRenderAll();
+        // 显式记录历史（insertAt 仅触发 object:added，HistoryPlugin 不监听该事件）
+        if (this.editor.saveState) {
+          this.editor.saveState();
+        }
+      })
+      .catch(() => {
+        console.error('背景图加载失败', requestUrl);
+      });
   }
   // 设置"变量背景"：以占位图铺满呈现（纯色底 + 矢量变量名叠加层），
   // src 保留变量 URL（序列化输出变量串而非占位 base64）；真实宽高比以预览/渲染为准。

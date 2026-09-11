@@ -12,6 +12,7 @@
  */
 import { fabric } from 'fabric';
 import { appendCacheBustParam } from '../assetUrl';
+import { loadImageResilient, normalizeCrossOrigin } from '../imageLoader';
 import {
   computeBackgroundLayout,
   cloneWorkspaceAsClip,
@@ -140,41 +141,44 @@ class RendererWorkspacePlugin {
         return;
       }
       this.removeBackgroundImage();
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const imgSize = {
-          w: img.naturalWidth || img.width || 0,
-          h: img.naturalHeight || img.height || 0,
-        };
-        const position2 = position || { x: 0.5, y: 0.5 };
-        const layout = computeBackgroundLayout({
-          workspace: ws,
-          imageSize: imgSize,
-          mode,
-          position: position2,
-        });
-        if (!layout) {
-          resolve(false);
-          cb && cb(false);
-          return;
-        }
-        const bgObj = createBackgroundObject({ img, layout, mode, position: position2 });
-        const wsIndex = this.canvas.getObjects().indexOf(ws);
-        this.canvas.insertAt(bgObj, wsIndex + 1);
-        this.canvas.requestRenderAll();
-        resolve(true);
-        cb && cb(true);
-      };
-      img.onerror = () => {
-        resolve(false);
-        cb && cb(false);
-      };
+      const position2 = position || { x: 0.5, y: 0.5 };
       // 请求 URL 追加「按接入域名分片缓存」参数（幂等；与编辑器 setBackgroundImage 同语义）
-      img.src = appendCacheBustParam(
+      const requestUrl = appendCacheBustParam(
         src,
         this.editor && this.editor.options && this.editor.options.cacheBust
       );
+      // CORS 回退加载：服务器无 Access-Control-* 时去掉 crossOrigin 重试（保显示，代价是画布被污染）
+      const crossOrigin = normalizeCrossOrigin(
+        this.editor && this.editor.options ? this.editor.options.crossOrigin : undefined
+      );
+      loadImageResilient(requestUrl, { crossOrigin })
+        .then((img) => {
+          const imgSize = {
+            w: img.naturalWidth || img.width || 0,
+            h: img.naturalHeight || img.height || 0,
+          };
+          const layout = computeBackgroundLayout({
+            workspace: ws,
+            imageSize: imgSize,
+            mode,
+            position: position2,
+          });
+          if (!layout) {
+            resolve(false);
+            cb && cb(false);
+            return;
+          }
+          const bgObj = createBackgroundObject({ img, layout, mode, position: position2 });
+          const wsIndex = this.canvas.getObjects().indexOf(ws);
+          this.canvas.insertAt(bgObj, wsIndex + 1);
+          this.canvas.requestRenderAll();
+          resolve(true);
+          cb && cb(true);
+        })
+        .catch(() => {
+          resolve(false);
+          cb && cb(false);
+        });
     });
   }
   removeBackgroundImage() {

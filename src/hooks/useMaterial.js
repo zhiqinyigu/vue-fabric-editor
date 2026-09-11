@@ -9,7 +9,7 @@
 import dayjs from 'dayjs';
 import { useRouter, useRoute } from './useRouter';
 import { uploadImg, createdTempl, getTmplInfo, updataTempl, removeTempl } from '@/api/user';
-import { Modal } from 'view-design';
+import { Modal, Message } from 'view-design';
 import { inject } from '@vue/composition-api';
 
 import { useI18n } from './useI18n';
@@ -105,6 +105,11 @@ export default function useMaterial() {
         });
     };
     const base64 = await canvasEditor.preview();
+    // 画布被跨域图片污染时 preview 返回 null（servers 已 emit save:error）
+    if (!base64) {
+      Message.error('导出失败：画布包含跨域图片，无法导出');
+      return;
+    }
     // 上传图片
     const fileInfo = await upload(base64);
     return fileInfo;

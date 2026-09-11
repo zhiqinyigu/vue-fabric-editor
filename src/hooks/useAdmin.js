@@ -7,7 +7,7 @@
  */
 
 import { updataTempl, uploadImg, deleteImg, getTempl, createdTempl } from '@/api/admin';
-import { Spin } from 'view-design';
+import { Spin, Message } from 'view-design';
 import { inject } from '@vue/composition-api';
 
 import { useRouter } from './useRouter';
@@ -44,6 +44,11 @@ export default function useAdmin() {
         });
     };
     const base64 = await canvasEditor.preview();
+    // 画布被跨域图片污染时 preview 返回 null（servers 已 emit save:error）
+    if (!base64) {
+      Message.error('导出失败：画布包含跨域图片，无法导出');
+      return;
+    }
     // 上传图片
     const fileInfo = await upload(base64);
     return fileInfo.id;

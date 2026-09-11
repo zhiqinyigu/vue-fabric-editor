@@ -84,7 +84,8 @@
     "down": "下载",
     "save_as_picture": "PNG图片",
     "copy_to_clipboard": "复制到剪切板",
-    "save_as_json": "保存为JSON"
+    "save_as_json": "保存为JSON",
+    "export_failed": "导出失败"
   },
   "layers": "图层",
   "emptyLayer": "暂无图层",

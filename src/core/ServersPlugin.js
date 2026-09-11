@@ -375,6 +375,8 @@ class ServersPlugin {
     }
     async clipboardBase64() {
         const dataUrl = await this.preview();
+        // 导出失败（如画布被跨域图片污染）返回 null，避免把 "null" 写进剪贴板
+        if (!dataUrl) return false;
         return clipboardText(dataUrl);
     }
     // 复制当前选中元素的 JSON 到剪贴板
@@ -411,11 +413,36 @@ class ServersPlugin {
             });
         });
     }
+    // toDataURL 兜底：CORS 回退加载（无 crossOrigin）会使画布被污染（tainted），
+    // 此时导出会抛 SecurityError。转为可读错误，供宿主提示"服务端放行 CORS 后才能导出"。
+    _toDataURLSafe(option) {
+        try {
+            return this.canvas.toDataURL(option);
+        } catch (e) {
+            const isTainted = e && (e.name === 'SecurityError' || /tainted|insecure|cross-origin|CORS/i.test(e.message || ''));
+            if (isTainted) {
+                const err = new Error(
+                    '画布包含跨域图片，无法导出：请让图片服务端返回 Access-Control-Allow-Origin，或改用同源/本地图片'
+                );
+                err.code = 'CANVAS_TAINTED';
+                err.cause = e;
+                throw err;
+            }
+            throw e;
+        }
+    }
     saveImg(multiplier = 1) {
         this.editor.hooksEntity.hookSaveBefore.callAsync('', () => {
             const option = this._getSaveOption(multiplier);
             this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-            const dataUrl = this.canvas.toDataURL(option);
+            let dataUrl;
+            try {
+                dataUrl = this._toDataURLSafe(option);
+            } catch (err) {
+                console.error(err);
+                this.editor.emit && this.editor.emit('save:error', err);
+                return;
+            }
             this.editor.hooksEntity.hookSaveAfter.callAsync(dataUrl, () => {
                 downFile(dataUrl, 'png');
             });
@@ -427,7 +454,15 @@ class ServersPlugin {
                 const option = this._getSaveOption(multiplier);
                 this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
                 this.canvas.renderAll();
-                const dataUrl = this.canvas.toDataURL(option);
+                let dataUrl;
+                try {
+                    dataUrl = this._toDataURLSafe(option);
+                } catch (err) {
+                    console.error(err);
+                    this.editor.emit && this.editor.emit('save:error', err);
+                    resolve(null);
+                    return;
+                }
                 this.editor.hooksEntity.hookSaveAfter.callAsync(dataUrl, () => {
                     resolve(dataUrl);
                 });

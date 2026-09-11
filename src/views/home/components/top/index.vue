@@ -79,6 +79,7 @@ export default {
 .right {
   display: flex;
   align-items: center;
+  padding-right: 16px;
   img {
     display: block;
     margin-right: 10px;

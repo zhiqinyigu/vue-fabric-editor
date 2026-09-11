@@ -317,6 +317,47 @@ describe('RendererCore 背景图（cover/contain 按原图尺寸重排，与编�
     }
   });
 
+  it('setBackgroundImage：服务端无 CORS 时回退无 crossOrigin 仍能显示', async () => {
+    const mock = mockLoadImageByUrl({ bg: { w: 1366, h: 768 } });
+    const OrigImage = global.Image;
+    const calls = [];
+    // 带 crossOrigin 的请求失败，去掉 crossOrigin 成功
+    global.Image = class {
+      constructor() {
+        this.crossOrigin = null;
+        this.naturalWidth = 1366;
+        this.naturalHeight = 768;
+        this.width = 1366;
+        this.height = 768;
+      }
+      set src(v) {
+        this._src = v;
+        calls.push({ src: v, crossOrigin: this.crossOrigin });
+        setTimeout(() => {
+          if (this.crossOrigin) this.onerror && this.onerror();
+          else this.onload && this.onload();
+        }, 0);
+      }
+      get src() {
+        return this._src;
+      }
+    };
+    try {
+      const { core } = createRenderer();
+      const json = makeBgPoster('', 'cover');
+      json.objects.splice(1, 1); // 无内置背景
+      await core.loadJSON(json);
+      const ok = await wsPlugin(core).setBackgroundImage('https://x/cors-bg.webp', 'cover');
+      expect(ok).toBe(true);
+      expect(wsPlugin(core).getBackgroundImageObj()).toBeTruthy();
+      // 第一次 CORS 失败 → 第二次无 crossOrigin 成功
+      expect(calls.map((c) => c.crossOrigin)).toEqual(['anonymous', null]);
+    } finally {
+      global.Image = OrigImage;
+      mock.mockRestore();
+    }
+  });
+
   it('contain + backgroundPosition（JSON 持久化）→ 重排贴合指定边', async () => {
     const mock = mockLoadImageByUrl({ bg: { w: 1366, h: 768 } });
     const { core } = createRenderer();

@@ -24,7 +24,10 @@ export interface RendererOptions {
   schema?: VariableDef[];
   /** 远程图片分片缓存；false 关闭 */
   cacheBust?: boolean | RendererCacheBustConfig;
-  /** 图片跨域策略，默认 'anonymous'；服务端不支持 CORS 时置 null（仅可显示、不可导出） */
+  /**
+   * 图片跨域策略，默认 'anonymous'：CORS 优先，失败自动回退为无 crossOrigin 以保显示
+   * （此时画布被污染、导出受限）；置 null 直接无 crossOrigin；置 'strict' 严格 CORS（失败即不显示）。
+   */
   crossOrigin?: string | null;
   [key: string]: unknown;
 }
@@ -81,6 +84,8 @@ export declare class RendererCore {
   getPlugin<T = unknown>(name: string): T | undefined;
   on(event: string, cb: (...args: any[]) => void): void;
   off(event: string, cb?: (...args: any[]) => void): void;
+  /** 画布是否已被跨域回退图片污染（污染后导出会受限） */
+  isCanvasTainted(): boolean;
   destroy(): void;
 }
 
@@ -117,6 +122,12 @@ export declare function resolveRenderSchema(...args: any[]): any;
 
 export declare function normalizeAssetUrl(...args: any[]): any;
 export declare function appendCacheBustParam(...args: any[]): any;
+
+/** 带 CORS 回退的图片加载：crossOrigin 失败时去掉重试（画布会被污染） */
+export declare function loadImageResilient(
+  url: string,
+  opts?: { crossOrigin?: string | null }
+): Promise<HTMLImageElement>;
 
 export declare function generateQrCodeDataURL(...args: any[]): Promise<string>;
 export declare function generateBarcodeDataURL(...args: any[]): Promise<string>;

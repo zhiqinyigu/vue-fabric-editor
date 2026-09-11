@@ -3,6 +3,11 @@ import ContextMenu from './ContextMenu.js';
 import ServersPlugin from './ServersPlugin';
 import Utils from './utils/utils';
 import PluginEngine from './PluginEngine';
+import {
+    installImageCorsFallback,
+    setCorsFallbackEnabled,
+    addCorsFallbackListener,
+} from './imageLoader';
 class Editor extends PluginEngine {
     constructor() {
         super(...arguments);
@@ -29,9 +34,25 @@ class Editor extends PluginEngine {
         this._initActionHooks();
         this._initServersPlugin();
         this.Utils = Utils;
+
+        // 远程图片 CORS 回退：服务器无 Access-Control-* 时仍能显示背景/图片（代价：画布被污染、导出受限）。
+        // options.crossOrigin = 'strict' 关闭回退（严格 CORS，失败即不显示）。
+        const crossOrigin = this.options ? this.options.crossOrigin : undefined;
+        setCorsFallbackEnabled(crossOrigin !== 'strict');
+        installImageCorsFallback();
+        // 发生 CORS 回退 → 画布被污染（导出受限），emit 供宿主提示
+        this.canvasTainted = false;
+        this._offCorsFallback = addCorsFallbackListener((info) => {
+            this.canvasTainted = true;
+            this.emit('image:cors-fallback', info);
+        });
     }
     get fabricCanvas() {
         return this.canvas;
+    }
+    // 画布是否已被跨域回退图片污染（污染后 toDataURL 会抛 SecurityError，导出受限）
+    isCanvasTainted() {
+        return this.canvasTainted === true;
     }
     // 引入组件
     use(plugin, options) {
@@ -44,6 +65,11 @@ class Editor extends PluginEngine {
         return this;
     }
     destory() {
+        if (this._offCorsFallback) {
+            this._offCorsFallback();
+            this._offCorsFallback = null;
+        }
+
         this.canvas = null;
         this.contextMenu = null;
         this.customEvents = [];

@@ -405,6 +405,24 @@ export declare function qrParamsToOption(...args: any[]): any;
 export declare function normalizeAssetUrl(...args: any[]): any;
 export declare function appendCacheBustParam(...args: any[]): any;
 
+/** 带 CORS 回退的图片加载：crossOrigin 失败时去掉重试（画布会被污染） */
+export declare function loadImageResilient(
+  url: string,
+  opts?: { crossOrigin?: string | null }
+): Promise<HTMLImageElement>;
+/** 包装 fabric.util.loadImage 使 loadJSON 全管线具备 CORS 回退（幂等） */
+export declare function installImageCorsFallback(): void;
+export declare function uninstallImageCorsFallback(): void;
+export declare function setCorsFallbackEnabled(enabled?: boolean): void;
+export declare function isCorsFallbackEnabled(): boolean;
+export declare function getCorsBlockedOrigins(): string[];
+export declare function addCorsFallbackListener(
+  cb: (info: { url: string; origin: string }) => void
+): () => void;
+export declare function normalizeCrossOrigin(value?: string | null): string | null;
+export declare function isStrictCrossOrigin(value?: string | null): boolean;
+export declare const STRICT_CROSS_ORIGIN: 'strict';
+
 export declare const OBJECT_DEFAULTS: Record<string, any>;
 export declare function getDefaultsForType(...args: any[]): any;
 

@@ -32,6 +32,8 @@ export default {
 
     const preview = () => {
       canvasEditor.preview().then((dataUrl) => {
+        // 导出失败（如画布被跨域图片污染）返回 null，此时已有 save:error toast，不弹空预览
+        if (!dataUrl) return;
         previewUrl.value = dataUrl;
         previewVisible.value = true;
       });

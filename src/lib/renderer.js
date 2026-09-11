@@ -36,6 +36,9 @@ export {
 // 变量图渲染期布局（渲染器在图片就绪后自动执行；导出供宿主复用/测试）
 export { layoutVariableImages } from '@/core/variableImageFit';
 export { normalizeAssetUrl, appendCacheBustParam } from '@/core/assetUrl';
+// 带 CORS 回退的图片加载：crossOrigin 请求失败自动去掉 crossOrigin 重试（保显示，
+// 代价是画布被污染、导出受限）；供宿主自行加载/测量图片时复用
+export { loadImageResilient } from '@/core/imageLoader';
 export { generateQrCodeDataURL, generateBarcodeDataURL, qrParamsToOption } from '@/core/generators';
 export {
   normalizeDefaultFields,

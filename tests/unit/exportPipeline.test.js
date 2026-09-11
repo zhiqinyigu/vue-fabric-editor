@@ -18,6 +18,7 @@ jest.mock('../../src/core/utils/utils', () => ({
 import ServersPlugin from '../../src/core/ServersPlugin';
 import VariablePlugin from '../../src/core/plugin/VariablePlugin';
 import { normalizeCanvasDefaults } from '../../src/core/jsonOptimizer';
+import { downFile } from '../../src/core/utils/utils';
 
 function createEditor() {
   const el = document.createElement('canvas');
@@ -182,5 +183,63 @@ describe('ServersPlugin 变量背景（tile）序列化顶替策略（D8）', ()
     const bg = full.objects.find((o) => o.id === 'backgroundImage');
     expect(bg.src).toBe('{{user.bg}}'); // 变量 URL 仍在 src（唯一事实来源）
     expect(String(bg.fill.source)).toContain('PLACEHOLDERBG'); // fill.source 保留占位图
+  });
+});
+
+describe('ServersPlugin 导出兜底（tainted canvas）', () => {
+  function makeTaintedError() {
+    const err = new Error('Tainted canvases may not be exported.');
+    err.name = 'SecurityError';
+    return err;
+  }
+
+  it('preview 遇到 SecurityError：resolve(null) + emit save:error（code=CANVAS_TAINTED）', async () => {
+    const { canvas, editor, plugin } = createEditor();
+    const events = [];
+    editor.emit = (name, payload) => events.push({ name, payload });
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const optionSpy = jest.spyOn(plugin, '_getSaveOption').mockReturnValue({});
+    const toDataURLSpy = jest.spyOn(canvas, 'toDataURL').mockImplementation(() => {
+      throw makeTaintedError();
+    });
+
+    const dataUrl = await plugin.preview(1);
+    expect(dataUrl).toBeNull();
+    const evt = events.find((e) => e.name === 'save:error');
+    expect(evt).toBeTruthy();
+    expect(evt.payload.code).toBe('CANVAS_TAINTED');
+
+    errSpy.mockRestore();
+    optionSpy.mockRestore();
+    toDataURLSpy.mockRestore();
+  });
+
+  it('saveImg 遇到 SecurityError：emit save:error 且不触发下载', () => {
+    const { canvas, editor, plugin } = createEditor();
+    const events = [];
+    editor.emit = (name, payload) => events.push({ name, payload });
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const optionSpy = jest.spyOn(plugin, '_getSaveOption').mockReturnValue({});
+    const toDataURLSpy = jest.spyOn(canvas, 'toDataURL').mockImplementation(() => {
+      throw makeTaintedError();
+    });
+    downFile.mockClear();
+
+    plugin.saveImg(1);
+    expect(events.some((e) => e.name === 'save:error')).toBe(true);
+    expect(downFile).not.toHaveBeenCalled();
+
+    errSpy.mockRestore();
+    optionSpy.mockRestore();
+    toDataURLSpy.mockRestore();
+  });
+
+  it('_toDataURLSafe 对非污染错误原样抛出（不伪装成跨域错误）', () => {
+    const { canvas, plugin } = createEditor();
+    const toDataURLSpy = jest.spyOn(canvas, 'toDataURL').mockImplementation(() => {
+      throw new Error('boom');
+    });
+    expect(() => plugin._toDataURLSafe({})).toThrow('boom');
+    toDataURLSpy.mockRestore();
   });
 });

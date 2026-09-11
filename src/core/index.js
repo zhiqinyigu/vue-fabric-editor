@@ -45,6 +45,18 @@ export { default as AutoGrowPlugin } from './plugin/AutoGrowPlugin';
 export * from './variableEngine';
 export { qrParamsToOption, generateQrCodeDataURL, generateBarcodeDataURL } from './generators';
 export { normalizeAssetUrl, appendCacheBustParam } from './assetUrl';
+export {
+  loadImageResilient,
+  installImageCorsFallback,
+  uninstallImageCorsFallback,
+  setCorsFallbackEnabled,
+  isCorsFallbackEnabled,
+  getCorsBlockedOrigins,
+  addCorsFallbackListener,
+  normalizeCrossOrigin,
+  isStrictCrossOrigin,
+  STRICT_CROSS_ORIGIN,
+} from './imageLoader';
 export { OBJECT_DEFAULTS, getDefaultsForType } from './objectDefaults';
 export {
   stripDefaultFields,

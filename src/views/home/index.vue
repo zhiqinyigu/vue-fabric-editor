@@ -33,6 +33,7 @@
 
 <script>
 import { reactive, provide, onMounted, onUnmounted } from '@vue/composition-api';
+import { Message } from 'view-design';
 import Top from './components/top/index.vue';
 import Left from './components/left/index.vue';
 import Right from './components/right/index.vue';
@@ -115,6 +116,10 @@ export default {
 
       // 初始化编辑器
       canvasEditor.init(canvas);
+      // 导出被跨域图片污染（tainted canvas）拦截 → toast 提示
+      canvasEditor.on('save:error', (err) => {
+        Message.error((err && err.message) || '导出失败');
+      });
       canvasEditor
         .use(DringPlugin)
         .use(PolygonModifyPlugin)

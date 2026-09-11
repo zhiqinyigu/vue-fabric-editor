@@ -100,10 +100,20 @@ export default {
         defaultQrCodeData: props.options.defaultQrCodeData,
         // 「按接入域名分片缓存」配置透传：默认 feDomain=location.hostname，传 false 关闭，传 { param, getValue } 自定义
         cacheBust: props.options.cacheBust,
+        // 图片跨域策略透传：默认 'anonymous'（CORS 失败自动回退无 crossOrigin 保显示）；
+        // null 直接无 crossOrigin；'strict' 严格 CORS（失败即不显示）
+        crossOrigin: props.options.crossOrigin,
       });
       // 背景图加载失败（CORS/URL 失效）→ 默认 console 警告 + 转发 renderer-error 事件，
       // 宿主可自行监听覆盖（如 toast 提示）
       core.on('renderer:error', (payload) => {
+        // eslint-disable-next-line no-console
+        console.warn('[FabricRenderer]', payload);
+        emit('renderer-error', payload);
+      });
+      // 导出被跨域图片污染（tainted canvas）拦截 → 转发 renderer-error 供宿主提示
+      core.on('save:error', (err) => {
+        const payload = { code: (err && err.code) || 'CANVAS_TAINTED', message: err && err.message };
         // eslint-disable-next-line no-console
         console.warn('[FabricRenderer]', payload);
         emit('renderer-error', payload);

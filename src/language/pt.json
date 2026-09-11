@@ -84,7 +84,8 @@
     "down": "Baixar",
     "save_as_picture": "Imagem PNG",
     "copy_to_clipboard": "Copiar para a área de transferência",
-    "save_as_json": "Salvar como JSON"
+    "save_as_json": "Salvar como JSON",
+    "export_failed": "Falha ao exportar"
   },
   "layers": "Camadas",
   "emptyLayer": "Sem camadas",
