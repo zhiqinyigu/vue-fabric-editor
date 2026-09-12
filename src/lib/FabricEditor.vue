@@ -123,6 +123,7 @@ import {
   CopyPlugin,
   MoveHotKeyPlugin,
   DeleteHotKeyPlugin,
+  EscHotKeyPlugin,
   GroupPlugin,
   DrawLinePlugin,
   GroupTextEditorPlugin,
@@ -311,6 +312,7 @@ export default {
         .use(CopyPlugin)
         .use(MoveHotKeyPlugin)
         .use(DeleteHotKeyPlugin)
+        .use(EscHotKeyPlugin)
         .use(GroupPlugin)
         .use(DrawLinePlugin)
         .use(GroupTextEditorPlugin)

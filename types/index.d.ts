@@ -394,6 +394,7 @@ export declare const LayerPlugin: any;
 export declare const CopyPlugin: any;
 export declare const MoveHotKeyPlugin: any;
 export declare const DeleteHotKeyPlugin: any;
+export declare const EscHotKeyPlugin: any;
 export declare const GroupPlugin: any;
 export declare const DrawLinePlugin: any;
 export declare const GroupTextEditorPlugin: any;

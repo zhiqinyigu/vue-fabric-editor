@@ -15,6 +15,7 @@ export { default as LayerPlugin } from './plugin/LayerPlugin';
 export { default as CopyPlugin } from './plugin/CopyPlugin';
 export { default as MoveHotKeyPlugin } from './plugin/MoveHotKeyPlugin';
 export { default as DeleteHotKeyPlugin } from './plugin/DeleteHotKeyPlugin';
+export { default as EscHotKeyPlugin } from './plugin/EscHotKeyPlugin';
 export { default as GroupPlugin } from './plugin/GroupPlugin';
 export { default as DrawLinePlugin } from './plugin/DrawLinePlugin';
 export { default as GroupTextEditorPlugin } from './plugin/GroupTextEditorPlugin';
