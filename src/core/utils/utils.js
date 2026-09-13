@@ -170,6 +170,17 @@ export function base64ToBlob(base64Data) {
   }
   return [new Blob([arrayBuffer], { type: imageType }), imageType.slice(6)];
 }
+/**
+ * raw-loader 导入的 SVG 源码 → data URI
+ *
+ * 画布控件图标（ControlsPlugin / LockPlugin / PolygonModifyPlugin）直接内联，
+ * 不再产出外部文件：消费方零构建配置，也不存在素材 404 的可能。
+ * @param {string} raw `!!raw-loader!` 导入的 SVG 源码
+ * @returns {string} 可直接赋给 img.src 的 data URI
+ */
+export function svgDataUri(raw) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(raw)}`;
+}
 export default {
   getImgStr,
   downFile,
@@ -184,4 +195,5 @@ export default {
   isFixedLayerObject,
   blobToBase64,
   base64ToBlob,
+  svgDataUri,
 };

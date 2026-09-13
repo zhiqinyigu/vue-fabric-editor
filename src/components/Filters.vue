@@ -13,14 +13,13 @@
         {{ $t('filters.simple') }}
         <template #content>
           <div class="filter-box">
-            <!-- 无参数滤镜 -->
+            <!-- 无参数滤镜：缩略图经 CSS 类名引用（url 由宿主 CSS 管线处理，无需素材接入配置） -->
             <div v-for="(value, key) in state.noParamsFilters" :key="key" class="filter-item">
-              <img
-                :src="getImageUrl(key)"
-                alt=""
-                @error="onThumbError(key)"
+              <i
+                class="filter-thumb"
+                :class="`filter-thumb--${key}`"
                 @click="changeFilters(key, !noParamsFilters[key])"
-              />
+              ></i>
               <Checkbox
                 v-model="state.noParamsFilters[key]"
                 @on-change="(val) => changeFilters(key, val)"
@@ -87,7 +86,6 @@ import useSelect from '@/hooks/select';
 import { uiType, paramsFilters, combinationFilters } from '@/config/constants/filter';
 import AttrSection from '@/components/attrPanel/AttrSection.vue';
 import ColorPalettePicker from '@/components/ColorPalettePicker.vue';
-import { resolveCanvasAsset, reportCanvasAssetFailure } from '@/core/canvasAsset';
 
 export default {
   name: 'ImageFilters',
@@ -193,19 +191,6 @@ export default {
       canvasEditor.off('selectOne', handleSelectOne);
     });
 
-    // 图片地址拼接：稳定命名（img/<Name>.png）+ 运行时基址解析（非 webpack 打包器场景）
-    function getImageUrl(name) {
-      return resolveCanvasAsset(
-        `img/${name}.png`,
-        require(`!!file-loader?name=img/[name].[ext]!../assets/filters/${name}.png`)
-      );
-    }
-
-    // 缩略图加载失败：给出「挂插件 / 配基址」的可操作提示（同一素材只提示一次）
-    function onThumbError(name) {
-      reportCanvasAssetFailure(`img/${name}.png`, getImageUrl(name));
-    }
-
     // 设置滤镜值
     function _changeAttr(type, key, value) {
       const activeObject = canvasEditor.canvas.getActiveObjects()[0];
@@ -305,8 +290,6 @@ export default {
       state,
       noParamsFilters,
       uiType,
-      getImageUrl,
-      onThumbError,
       changeFilters,
       changeFiltersByParams,
       handleSelectOne,
@@ -316,6 +299,42 @@ export default {
 </script>
 
 <style scoped lang="less">
+// 滤镜缩略图：以 CSS url() 引用（不再走 JS require 外链）。
+// lib 构建时 url-loader 对小图内联、大图由 file-loader 产出相对路径写入本 CSS；
+// 宿主 import 本 CSS 时其 css-loader 会重新解析 url 并按宿主 publicPath 重新产出 —— 消费方零配置。
+.filter-thumb {
+  display: block;
+  width: 90%;
+  height: 60px;
+  border-radius: 4px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid #dcdee2;
+}
+.filter-thumb--BlackWhite {
+  background-image: url('../assets/filters/BlackWhite.png');
+}
+.filter-thumb--Brownie {
+  background-image: url('../assets/filters/Brownie.png');
+}
+.filter-thumb--Vintage {
+  background-image: url('../assets/filters/Vintage.png');
+}
+.filter-thumb--Kodachrome {
+  background-image: url('../assets/filters/Kodachrome.png');
+}
+.filter-thumb--technicolor {
+  background-image: url('../assets/filters/technicolor.png');
+}
+.filter-thumb--Polaroid {
+  background-image: url('../assets/filters/Polaroid.png');
+}
+.filter-thumb--Invert {
+  background-image: url('../assets/filters/Invert.png');
+}
+.filter-thumb--Sepia {
+  background-image: url('../assets/filters/Sepia.png');
+}
 .filter-box {
   overflow: hidden;
   .filter-item {
@@ -323,9 +342,8 @@ export default {
     cursor: pointer;
     width: 50%;
     margin-bottom: 10px;
-    img {
-      width: 90%;
-      height: auto;
+    .filter-thumb:hover {
+      border-color: #2d8cf0;
     }
   }
 }

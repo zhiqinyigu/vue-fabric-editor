@@ -31,10 +31,6 @@ export { createI18n, messages } from './i18n';
 // 详见 PACKAGING.md「运行时单实例注入接口」。
 export { installRuntime, isRuntimeInjected } from '@/core/runtime';
 
-// 画布素材基址（非 webpack 打包器场景；webpack 项目请使用 VfeAssetsPlugin）。
-// 详见 PACKAGING.md §4.5「画布素材资源与宿主接入契约」。
-export { setCanvasAssetsBaseUrl, resolveCanvasAsset } from '@/core/canvasAsset';
-
 // 内置可覆盖组件（UI 注册表 key）
 export { default as TopbarImport } from './components/TopbarImport.vue';
 export { default as RightPanel } from '@/views/home/components/right/index.vue';

@@ -12,7 +12,6 @@
 | **编辑器库** `@chenyican/vue-fabric-editor` | `src/lib/index.js` | `dist/vue-fabric-editor/` | 完整编辑器组件 `FabricEditor` + 引擎 + 全部编辑插件 |
 | **前台渲染器** `@chenyican/vue-fabric-editor/fabric-renderer` | `src/lib/renderer.js` | `dist/fabric-renderer/` | 只读渲染组件 `FabricRenderer`，C 端展示 / 出图用，无编辑能力 |
 | **扩展示例** | `src/examples/` | — | 模板管理、在线图片、AI 工具、海报入口等，**拷贝进自己工程改造**使用 |
-| **宿主接入工具** | `loader/` | 随包发布 | webpack 插件 / 素材 loader（构建期使用，见 [§2.2](#22-构建期必做画布素材仅编辑器)） |
 
 ---
 
@@ -96,86 +95,31 @@ npm i @chenyican/vue-fabric-editor
 
 库的运行时依赖都声明在 `peerDependencies`：**npm 7+ 会自动装齐，npm 6 / `--legacy-peer-deps` 不会**。
 
-**① 查缺哪些包**
+**① 查缺 + 生成补装命令**（在消费项目根目录执行，只读不改动文件；按接入方式选一条，输出可直接复制的 `npm i`）
+
+编辑器版：
 
 ```bash
-node -e "const fs=require('fs');const p=require('@chenyican/vue-fabric-editor/package.json');const miss=Object.keys(p.peerDependencies).filter(d=>!fs.existsSync('node_modules/'+d));console.log(miss.length?'缺少：'+miss.join(' '):'依赖齐全')"
+node -e "const fs=require('fs'),p=require('@chenyican/vue-fabric-editor/package.json'),m=Object.keys(p.peerDependencies).filter(d=>!fs.existsSync('node_modules/'+d));console.log(m.length?'缺少 '+m.length+' 个，复制执行：\n\nnpm i '+m.join(' '):'编辑器依赖齐全，无需安装')"
 ```
 
-> 对照**所装版本**包内的 `peerDependencies` 检查根目录 `node_modules`。不跑命令也行：启动 / 构建报 `Module not found: Can't resolve 'xxx'` 时，按包名补装即可。
-
-**② 一次装齐**
-
-接入**编辑器**（17 个）：
+渲染器版（只检查渲染器必需的 9 个）：
 
 ```bash
-npm i vue@2.6.10 view-design@4 fabric@5.5.0 @vue/composition-api vue-i18n lodash-es hotkeys-js jsbarcode qr-code-styling svg-path-editor-lib number-precision events tapable uuid vue-cropper fontfaceobserver @webtoon/psd
+node -e "const fs=require('fs'),need=['vue','@vue/composition-api','fabric','events','tapable','uuid','fontfaceobserver','jsbarcode','qr-code-styling'],m=need.filter(d=>!fs.existsSync('node_modules/'+d));console.log(m.length?'缺少 '+m.length+' 个，复制执行：\n\nnpm i '+m.join(' '):'渲染器依赖齐全，无需安装')"
 ```
 
-只接入**渲染器**（`/fabric-renderer`，9 个）：
+> 对照**所装版本**包内的 `peerDependencies` 检查根目录 `node_modules`。全新项目在空目录执行会输出
+> 完整的 16 / 9 个包命令，效果等同一次装齐。不跑命令也行：启动 / 构建报
+> `Module not found: Can't resolve 'xxx'` 时，按包名补装即可。
 
-```bash
-npm i vue@2.6.10 @vue/composition-api fabric@5.5.0 events tapable uuid fontfaceobserver jsbarcode qr-code-styling
-```
+> **从 1.0.3 及更早升级**：画布素材（控件图标 / 滤镜缩略图）已全部内联、`svg-path-editor-lib`
+> 已随包打包——消费项目里的 `VfeAssetsPlugin` 配置和 `transpileDependencies` 条目都可以删掉，
+> `npm i` 也不再有这两个包的要求。
 
-### 2.2 构建期必做：画布素材（仅编辑器）
+### 2.2 接入：编辑器（`FabricEditor`）
 
-> 只接入渲染器（§2.4）的项目可跳过本节——这些素材只服务编辑器。
-
-库产物内有 **13 个画布素材**：5 个控件图标 svg（`middlecontrol`、`middlecontrolhoz`、`edgecontrol`、`rotateicon`、`lock`）+ 8 张滤镜缩略图 png（`img/*.png`）。宿主打包器不会自动复制它们，不接入会控制条图标 404 → 选中元素报 `InvalidStateError`。
-
-> 产物目录里每个素材都另有一份带 hash 的副本（内容完全相同，lib 构建下 file-loader 的两种命名；产物 JS/CSS 只引用稳定名那几份，hash 副本未被引用）。所以 `img/` 里 8 张图会看到 16 个文件——**整目录拷贝即可**，无需挑文件。
-
-两种方式**任选其一**（webpack 两种都支持）：
-
-| 方式 | 适用打包器 | 需要自己托管素材？ |
-| --- | --- | --- |
-| 挂内置插件 | 仅 webpack 4 / 5、vue-cli | 否，随宿主构建输出 |
-| 配 `assetsBaseUrl` | 任意打包器（webpack 也可） | 是（静态目录或 CDN） |
-
-**方式一**：挂内置插件（webpack），按你的构建配置挑一种写法：
-
-```js
-// vue-cli：vue.config.js（configureWebpack，最常见）
-const VfeAssetsPlugin = require('@chenyican/vue-fabric-editor/loader/webpack-plugin.js');
-module.exports = { configureWebpack: { plugins: [new VfeAssetsPlugin()] } };
-// 若已写成函数形式，则在里面追加：config.plugins.push(new VfeAssetsPlugin());
-```
-
-```js
-// vue-cli：vue.config.js（chainWebpack / webpack-chain）
-const VfeAssetsPlugin = require('@chenyican/vue-fabric-editor/loader/webpack-plugin.js');
-module.exports = {
-  chainWebpack: (config) => {
-    config.plugin('vfe-assets').use(VfeAssetsPlugin);
-  },
-};
-```
-
-```js
-// 纯 webpack：webpack.config.js
-const VfeAssetsPlugin = require('@chenyican/vue-fabric-editor/loader/webpack-plugin.js');
-module.exports = { plugins: [new VfeAssetsPlugin()] };
-```
-
-> 插件可选参数（`test` 匹配的产物、`fileLoader` 路径）见 `loader/webpack-plugin.js` 顶部注释；默认值已适配本包，通常不用传。
-
-**方式二**：配基址 + 自己托管素材（任意打包器，webpack 也可）：
-
-```js
-// main.js（与上面的插件天然互斥，无需开关）
-installRuntime({ vue: Vue, compositionApi: VueCompositionAPI, assetsBaseUrl: '/static/vfe-assets/' });
-// 素材来源：把 node_modules/@chenyican/vue-fabric-editor/dist/vue-fabric-editor/ 下的
-// *.svg 与 img/ 整目录拷贝到项目静态目录（或直接指向 CDN 路径）
-```
-
-两种方式都没配时，素材 404 会在控制台打印**可照做的错误提示**（含两种接入方式）。
-
-> 细节、排查清单与"为什么"： [PACKAGING.md §4.5](./PACKAGING.md)。
-
-### 2.3 接入：编辑器（`FabricEditor`）
-
-两者是**独立入口、各自按需接入**：只做前台海报展示的项目看 §2.4 即可，不必引入 ViewUI / i18n / 画布素材等编辑器专属依赖。
+两者是**独立入口、各自按需接入**：只做前台海报展示的项目看 §2.3 即可，不必引入 ViewUI / i18n 等编辑器专属依赖。
 
 **`main.js`**
 
@@ -199,7 +143,7 @@ new Vue({ i18n: createI18n(), render: (h) => h(App) }).$mount('#app');
 
 编辑器界面使用 `i-*` 组件，所以 `Vue.use(ViewUI)` 必须执行；根实例挂不挂 `i18n` 可选（不挂则 `t()` 退化为返回 key，文案显示为 key，功能不受影响）。
 
-关于那行 `installRuntime`：依赖树里若出现第二份 `vue` / `@vue/composition-api`，会分别导致 `_vm.$t is not a function` 与 `The setup binding property "..." is already declared`。入口调用一次即可消除，**跨打包器通用、不需要构建期配置**（渲染器同样适用，见 §2.4）。不调用则回退为历史行为，可用 `isRuntimeInjected()` 自检；原理见 [PACKAGING.md §4.6](./PACKAGING.md)。
+关于那行 `installRuntime`：依赖树里若出现第二份 `vue` / `@vue/composition-api`，会分别导致 `_vm.$t is not a function` 与 `The setup binding property "..." is already declared`。入口调用一次即可消除，**跨打包器通用、不需要构建期配置**（渲染器同样适用，见 §2.3）。不调用则回退为历史行为，可用 `isRuntimeInjected()` 自检；原理见 [PACKAGING.md §4.6](./PACKAGING.md)。
 
 **`App.vue`**
 
@@ -245,9 +189,9 @@ export default {
 </script>
 ```
 
-### 2.4 接入：渲染器（`FabricRenderer`，只读展示）
+### 2.3 接入：渲染器（`FabricRenderer`，只读展示）
 
-只渲染不编辑，**不需要 ViewUI、不需要 i18n、不需要 §2.2 的画布素材**（控件图标与滤镜缩略图只服务编辑器）。
+只渲染不编辑，**不需要 ViewUI、不需要 i18n**（svg-path-editor-lib 只服务编辑器且已随包打包）。
 
 **`main.js`**
 
@@ -259,7 +203,7 @@ import '@chenyican/vue-fabric-editor/fabric-renderer/style'; // 可选
 import App from './App.vue';
 
 Vue.use(VueCompositionAPI);
-// 单实例注入：作用与自检方式同 §2.3
+// 单实例注入：作用与自检方式同 §2.2
 installRuntime({ vue: Vue, compositionApi: VueCompositionAPI });
 
 new Vue({ render: (h) => h(App) }).$mount('#app');
@@ -292,9 +236,8 @@ export default {
 | CSS 入口 | `/style` | `/fabric-renderer/style` |
 | `createI18n()` | 可选 | 不需要 |
 | `installRuntime({ vue, compositionApi })` | 推荐 | 推荐 |
-| 画布素材（插件 / `assetsBaseUrl`，见 §2.2） | 必须 | 不需要 |
 
-### 2.5 CSS / i18n / 类型
+### 2.4 CSS / i18n / 类型
 
 | 项 | 现代栈（webpack5 / Vite） | webpack 4 |
 | --- | --- | --- |
@@ -303,19 +246,16 @@ export default {
 | 渲染器 JS | `import { FabricRenderer } from '@chenyican/vue-fabric-editor/fabric-renderer'` | 相同 |
 | 渲染器 CSS | `import '@chenyican/vue-fabric-editor/fabric-renderer/style'` | `import '@chenyican/vue-fabric-editor/dist/fabric-renderer/fabric-renderer.css'` |
 
-- **i18n（仅编辑器）**：`createI18n()` 的实例挂到根实例 `i18n` 选项即可（见 §2.3）。未接入时 `t()` 退化为返回 key，界面仍可运行。
+- **i18n（仅编辑器）**：`createI18n()` 的实例挂到根实例 `i18n` 选项即可（见 §2.2）。未接入时 `t()` 退化为返回 key，界面仍可运行。
 - **类型**：包内自带 `.d.ts`（`types/index.d.ts`、`types/fabric-renderer.d.ts`），TS 项目开箱可用，无需 `declare module`。
 - **webpack4 + 根级 postcss 配置**：宿主根目录有 `postcss.config.js` 时，import 包内 css（`/style`、`/fabric-renderer/style`）或 iview.css 会报 `No PostCSS Config found`——postcss-loader 3 从 css 文件位置向上查找配置，node_modules 内的 css 找不到宿主根级配置。在 `vue.config.js` 显式指定：`css.loaderOptions.postcss.config.path = path.resolve(__dirname, 'postcss.config.js')`；宿主无 postcss 配置文件则不受影响。
 
-### 2.6 接入检查清单
+### 2.5 接入检查清单
 
 - [ ] `Vue.use(VueCompositionAPI)` 已执行（两个组件都依赖）
 - [ ] 已引入对应 CSS：编辑器 `/style`、渲染器 `/fabric-renderer/style`
 - [ ] 入口调用了 `installRuntime({ vue, compositionApi })`
-- [ ] **仅编辑器**：已按 §2.2 选定一种素材接入方式（挂 `VfeAssetsPlugin()`，或配 `assetsBaseUrl` 并托管素材）
 - [ ] **仅编辑器**：`Vue.use(ViewUI)` 已执行（模板使用 `i-*` 组件）
-- [ ] webpack4：`transpileDependencies` 包含 `svg-path-editor-lib`（其产物含 ES2022 class static block，webpack4 的 acorn 无法解析）
-- [ ] 若宿主有 `svg → Vue 组件` 规则（vue-svg-loader 等），确认未命中本包（见 PACKAGING.md §4.5 契约）
 - [ ] 外层容器给了高度（编辑器按 `100vh` 铺满）
 - [ ] 远程图片服务器支持 CORS（否则可显示但**无法导出 PNG**）
 
@@ -607,14 +547,12 @@ npm run build:lib && npm run build:lib:renderer   # 确认库产物可构建
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| 选中/拖动元素报 `InvalidStateError ... width or height of 0` | 画布素材 404（控制条图标 broken） | 二选一接入：挂 `VfeAssetsPlugin()` 或配 `assetsBaseUrl`（[§2.2](#22-构建期必做画布素材仅编辑器)） |
-| 控制台 `[vfe] 画布素材加载失败（xxx）` | 同上（库自带的明确报错） | 按提示二选一接入 |
 | `The setup binding property ... is already declared` | 依赖树有两份 `@vue/composition-api` | 入口 `installRuntime({ vue, compositionApi })`；或 `npm dedupe` |
 | `_vm.$t is not a function` | 依赖树有两份 `vue` | 同上 |
-| webpack4 `Can't resolve '@chenyican/vue-fabric-editor/style'` | webpack4 不识别 `exports` 子路径 | 用完整路径 `.../dist/vue-fabric-editor/vue-fabric-editor.css`（§2.5） |
-| `No PostCSS Config found in: ...` | vue-cli4 / postcss-loader 3 对 node_modules 内 css（本包 style、iview.css）向上找不到宿主根级配置 | `vue.config.js` 指定 `css.loaderOptions.postcss.config.path`（§2.5）；无根级 postcss 配置文件则不受影响 |
-| `Module parse failed` / `class static block` 相关报错 | 依赖含 ES2022 语法（如 `svg-path-editor-lib`） | vue-cli 项目在 `transpileDependencies` 加入该依赖 |
-| 图标变成 Vue 组件 / 对象（不是 URL） | 宿主 `svg → 组件` 规则命中了本包 | 让该规则 `exclude` 本包，或用内置 plugin 的默认收窄 `test` |
+| webpack4 `Can't resolve '@chenyican/vue-fabric-editor/style'` | webpack4 不识别 `exports` 子路径 | 用完整路径 `.../dist/vue-fabric-editor/vue-fabric-editor.css`（§2.4） |
+| `No PostCSS Config found in: ...` | vue-cli4 / postcss-loader 3 对 node_modules 内 css（本包 style、iview.css）向上找不到宿主根级配置 | `vue.config.js` 指定 `css.loaderOptions.postcss.config.path`（§2.4）；无根级 postcss 配置文件则不受影响 |
+| `Module parse failed` / `class static block` 相关报错 | 宿主其它依赖含 ES2022 语法 | 在 `transpileDependencies` 加入该依赖（本包 1.0.4 起 `svg-path-editor-lib` 已随包打包，无需配置） |
+| `Cannot find module '.../loader/webpack-plugin.js'` | 1.0.4 起素材已内联，宿主接入插件已移除 | 删除消费项目 vue.config.js 里的 `VfeAssetsPlugin` 配置（见 §2.1 升级说明） |
 | 导出 PNG 报跨域（`SecurityError`） | 画布被无 CORS 头的远程图污染 | 图床返回 `Access-Control-Allow-Origin`；或用同源图片代理 |
 | 图片能显示但导出缺图 | 触发了 CORS 回退（画布已污染） | 同上；`options.crossOrigin = 'strict'` 可改为"失败即不显示" |
 | 字体不生效 | 未提供 `adapters.font` 或字体文件无 CORS | 实现字体适配器并确保字体可跨域访问 |

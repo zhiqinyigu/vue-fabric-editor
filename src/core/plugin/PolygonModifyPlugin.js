@@ -1,8 +1,10 @@
 import { fabric } from 'fabric';
-import { drawImg } from '../utils/utils';
-import edgeImg from '!!file-loader?name=[name].[ext]!../assets/edgecontrol.svg';
-import { resolveCanvasAsset, reportCanvasAssetFailure } from '../canvasAsset';
+import { drawImg, svgDataUri } from '../utils/utils';
+// 多边形顶点图标内联为 data URI：不产出外部文件，消费方零构建配置（详见 README「素材已内联」）
+import edgeSvg from '!!raw-loader!../assets/edgecontrol.svg';
 import { noop } from 'lodash-es';
+
+const edgeImg = svgDataUri(edgeSvg);
 const actionHandler = function (eventData, transform, x, y) {
   const polygon = transform.target,
     currentControl = polygon.controls[polygon.__corner],
@@ -67,8 +69,7 @@ class PolygonModifyPlugin {
     this._onDeselected = noop;
     this.isEdit = false;
     const img = document.createElement('img');
-    img.src = resolveCanvasAsset('edgecontrol.svg', edgeImg);
-    img.onerror = () => reportCanvasAssetFailure('edgecontrol.svg', img.src);
+    img.src = edgeImg;
     this.img = img;
     this.init();
   }

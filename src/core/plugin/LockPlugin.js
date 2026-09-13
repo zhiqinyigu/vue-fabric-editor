@@ -7,8 +7,11 @@
  */
 import { fabric } from 'fabric';
 import { SelectEvent, SelectMode } from '../eventType';
-import lockImg from '!!file-loader?name=[name].[ext]!../assets/lock.svg';
-import { resolveCanvasAsset, reportCanvasAssetFailure } from '../canvasAsset';
+// 锁图标内联为 data URI：不产出外部文件，消费方零构建配置（详见 README「素材已内联」）
+import lockSvg from '!!raw-loader!../assets/lock.svg';
+import { svgDataUri } from '../utils/utils';
+
+const lockImg = svgDataUri(lockSvg);
 var ItypeKey;
 (function (ItypeKey) {
   ItypeKey['lockMovementX'] = 'lockMovementX';
@@ -38,8 +41,7 @@ class LockPlugin {
   }
   init() {
     const imgEl = document.createElement('img');
-    imgEl.src = resolveCanvasAsset('lock.svg', lockImg);
-    imgEl.onerror = () => reportCanvasAssetFailure('lock.svg', imgEl.src);
+    imgEl.src = lockImg;
     const that = this;
     function renderIcon(ctx, left, top, styleOverride, fabricObject) {
       const iconWith = 25;

@@ -24,7 +24,7 @@
 | 改变量替换 / autoGrow 规则 | §5 | `variableEngine.js`（两端共用） |
 | 改变量表（schema）注入/权限/持久化 | §10 | `VariablePlugin` + `variableSchema.js` |
 | 改图片加载 / 跨域 / 导出 | §6 + §7.4 | `ServersPlugin` / `imageLoader.js` |
-| 处理"宿主环境差异"（多副本实例、素材路径） | §7 | `runtime.js` / `canvasAsset.js` |
+| 处理"宿主环境差异"（多副本实例） | §7 | `runtime.js` |
 | 新增包内导出、改构建产物 | §8 + §9 | `src/lib/index.js` / `src/lib/renderer.js` / `vue.config.js` |
 | 提交前自查 | §11 | 检查清单 + 验证命令 |
 
@@ -80,13 +80,12 @@
                          │                        │
    ┌─────────────────────┴────────────────────────┴─────────────────────────────┐
    │ 运行时能力层（跨引擎、面向宿主环境；见 §7）                                    │
-   │ runtime.js（单实例注入）/ canvasAsset.js（素材解析）/ patchImageRender.js     │
+   │ runtime.js（单实例注入）/ patchImageRender.js                                 │
    │ / imageLoader.js（CORS 回退与画布污染标记）                                   │
    └────────────────────────────────────────────────────────────────────────────┘
                          ▲
    ┌─────────────────────┴──────────────────────────────────────────────────────┐
-   │ 构建期宿主契约（不参与运行时；见 §8）：loader/（webpack 插件 + 素材 loader）   │
-   │ + types/*.d.ts（对外类型）                                                  │
+   │ 构建期宿主契约（不参与运行时；见 §8）：types/*.d.ts（对外类型）                │
    └────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -99,10 +98,9 @@
 | 插件目录 | `src/core/plugin/*.js`（编辑插件 + `Renderer*Plugin`） |
 | 加载 / 导出管线 | `src/core/ServersPlugin.js` |
 | 共享纯函数 | `src/core/{workspaceGeometry,variableEngine,variableSchema,jsonOptimizer,objectDefaults,assetUrl,generators}.js` |
-| 运行时能力 | `src/core/{runtime,canvasAsset,patchImageRender,imageLoader}.js` |
+| 运行时能力 | `src/core/{runtime,patchImageRender,imageLoader}.js` |
 | 组件外壳 | `src/lib/FabricEditor.vue` / `src/lib/FabricRenderer.vue` |
 | 包入口 | `src/lib/index.js`（编辑器）/ `src/lib/renderer.js`（渲染器） |
-| 宿主构建工具 | `loader/{webpack-plugin,assets-loader,assets-core}.js` |
 | 对外类型 | `types/index.d.ts` / `types/fabric-renderer.d.ts` |
 | 构建脚本 | `vue.config.js` + `package.json` 的 `build:lib*` |
 
@@ -238,15 +236,14 @@ render()
 
 ### 7.1 `runtime.js`（单实例注入门面）
 - **问题**：依赖树出现第二份 `vue` 或 `@vue/composition-api` 时，分别导致 `_vm.$t is not a function`、`The setup binding property "..." is already declared`。
-- **机制**：消费方入口调用 `installRuntime({ vue, compositionApi, assetsBaseUrl })` 注入单例；门面把所有 composition-api API 包装为**调用期取值**（注入晚于 import 也生效）；`onRuntimeReady(cb)` 处理模块加载期的全局注册（如 `Vue.use(VueI18n)` 补注册一次，幂等）。
+- **机制**：消费方入口调用 `installRuntime({ vue, compositionApi })` 注入单例；门面把所有 composition-api API 包装为**调用期取值**（注入晚于 import 也生效）；`onRuntimeReady(cb)` 处理模块加载期的全局注册（如 `Vue.use(VueI18n)` 补注册一次，幂等）。
 - **约束**：未注入时必须回退为"构建解析到的实例"（向后兼容），并在开发环境给一次可操作提示；`src/lib/i18n.js`、`src/language/index.js` 是仅有的两个模块加载期注册点。
 - **构建配合**：`vue.config.js` 在 lib 构建中把 `@vue/composition-api$` 精确 alias 到 `src/core/runtime.js`，门面自身用深层路径懒加载真实包（external），因此源码里的 `import { ref } from '@vue/composition-api'` 无需改动。
 
-### 7.2 `canvasAsset.js`（画布素材解析）
-- **问题**：产物里 13 个画布素材（5 控件图标 + 8 滤镜缩略图）是 file-loader 产出的 `__webpack_require__.p + "x.svg"`，宿主不会复制包内文件 → 404 → 控件图标 broken → `drawImage` 抛 `InvalidStateError`。
-- **机制**：`resolveCanvasAsset(相对路径, fallback)` —— 配了 `assetsBaseUrl` 用基址拼（相对路径即**稳定文件名**），否则回退 file-loader 产物（webpack 插件路径）。`reportCanvasAssetFailure()` 在加载失败时打印一次可照做的错误。
-- **素材命名**：库构建对这批素材关闭 hash（`name=[name].[ext]` / `img/[name].[ext]`），保证基址路径可预期；**新增画布素材必须沿用稳定命名**。
-- **两条接入路径互斥**：webpack 用 `VfeAssetsPlugin`（引用被改写，基址不生效）；其它打包器用基址。详见 [PACKAGING.md §4.5](./PACKAGING.md)。
+### 7.2 画布素材（1.0.4 起内联，无独立模块）
+- **问题（历史）**：素材曾是 file-loader 产出的 `__webpack_require__.p + "x.svg"`，宿主不会复制包内文件 → 404 → 控件图标 broken → `drawImage` 抛 `InvalidStateError`；当时以 `canvasAsset.js`（运行时基址）+ `loader/`（webpack 改写）解决。
+- **现状**：素材引用全部改为**宿主可自行处理**的形态——5 个控件图标在 JS 内联为 data URI（`!!raw-loader!` + `svgDataUri()`，见 `utils.js`）；8 张滤镜缩略图经 `Filters.vue` 的 CSS 相对 `url()` 引用，宿主 CSS 管线自动产出/重写。`canvasAsset.js` 与 `loader/` 已删除（迁移说明见 [PACKAGING.md §4.5](./PACKAGING.md)）。
+- **约束**：**新增画布素材必须沿用同样模式**——JS 侧绘制用 raw-loader + data URI，DOM 展示走 CSS `url()`；不要再引入 JS 侧的外部文件 URL。
 
 ### 7.3 `patchImageRender.js`（渲染守卫）
 - **问题**：容器布局未就绪时初始化 → `Image._element` 或 `canvas.clipPath._cacheCanvas` 为 0×0 → `drawImage` 抛 `InvalidStateError`，整次 `renderAll` 中断、画布空白（编辑器在路由跳转挂载时最易触发）。
@@ -260,18 +257,15 @@ render()
 
 ---
 
-## 8. 构建期宿主契约（`loader/`、`types/`）
+## 8. 构建期宿主契约（`types/`）
 
-这部分**不参与运行时**，是给消费方构建链路用的；改动需同步 `package.json` 的 `files` / `exports` 与 [PACKAGING.md](./PACKAGING.md)。
+这部分**不参与运行时**，是对外类型契约；改动需同步 `package.json` 的 `files` / `exports` 与 [PACKAGING.md](./PACKAGING.md)。
 
 | 文件 | 作用 |
 | --- | --- |
-| `loader/assets-core.js` | 纯函数：素材引用的识别 / 去重 / 改写（`collectAssetRefs`、`rewriteAssetRefs`、`rewriteToAssetMap`）。**各打包器适配层的共同底座**——新增 Vite/Rollup/esbuild 插件必须复用，不许另写一套 |
-| `loader/assets-loader.js` | webpack loader：把素材 URL 改写为宿主 `require`（复用 assets-core） |
-| `loader/webpack-plugin.js` | `VfeAssetsPlugin`：一行接入，幂等注入上面的 loader 规则 |
 | `types/*.d.ts` | 对外类型（Props / 事件 / api / 扩展协议 / `installRuntime` 等），**手写维护**，改契约必须同步 |
 
-> 宿主工具依赖 `file-loader`（vue-cli 自带）→ loader 从**宿主项目根**解析，解析失败给出可操作报错。
+> 历史上的 `loader/`（webpack 插件 + 素材 loader）已随「画布素材内联」删除（见 §7.2 / PACKAGING §4.5）。
 
 ---
 
@@ -361,15 +355,15 @@ render()
 - [ ] hooks 必须返回 Promise 或值，**不要吞异常**（`AsyncSeriesHook` 会因此静默中断加载管线）。
 - [ ] 插件 `destroy()` 里解绑自身监听的 canvas / editor 事件。
 - [ ] 新增"把资源画到画布"的逻辑：容忍 0 尺寸元素（见 §7.3），不要直接 `drawImage`。
-- [ ] 新增画布素材：沿用**稳定命名**（无 hash）+ 走 `resolveCanvasAsset`，否则非 webpack 宿主的 `assetsBaseUrl` 路径会失效（见 §7.2）。
+- [ ] 新增画布素材：JS 绘制用 raw-loader + `svgDataUri()` 内联；DOM 展示走组件内 CSS `url()` 相对引用——**不要引入 JS 侧外部文件 URL**（见 §7.2）。
 - [ ] 触及宿主实例的代码（vue / composition-api）：走 `runtime.js` 门面，别直接 `require('vue')`。
 - [ ] 改对外 API / Props / 事件 / 扩展协议：同步 `types/*.d.ts` 与 [README](./README.md) 组件文档。
 
 ### 11.3 验证命令
 
 ```bash
-npx jest                        # 全量单测（当前 35 套件 / 417 用例）
-npx jest tests/runtimeFacade.test.js tests/canvasAsset.test.js   # 单跑某几个套件
+npx jest                        # 全量单测（当前 37 套件 / 450 用例）
+npx jest tests/runtimeFacade.test.js   # 单跑某几个套件
 npm run lint                    # 代码规范
 npm run typecheck               # types/*.d.ts 冒烟
 npm run build                   # 应用站点
@@ -383,7 +377,6 @@ npm run build:lib:renderer      # 渲染包
 - `pluginEngine.test.js` 校验基类契约（hooks 创建/绑定/清理、`Editor` 与 `RendererCore` 继承关系）。
 - `variableSchema.test.js` / `variableSchemaPlugin.test.js` 校验变量表纯函数与 `VariablePlugin` 扩展契约。
 - `runtimeFacade.test.js` 校验单实例门面（回退 / 注入 / 幂等 / 互操作解包 / `onRuntimeReady` 时序）。
-- `canvasAsset.test.js` / `assetsCore.test.js` 校验素材解析与 loader 共享核心（含幂等）。
 - CSS / `qr-code-styling` 等在 node 环境需 `jest.mock(..., { virtual: true })` 兜底，参考已有测试头部。
 
 ---

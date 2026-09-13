@@ -6,11 +6,17 @@
  * @Description: 控制条插件
  */
 import { fabric } from 'fabric';
-import verticalImg from '!!file-loader?name=[name].[ext]!../assets/middlecontrol.svg';
-import horizontalImg from '!!file-loader?name=[name].[ext]!../assets/middlecontrolhoz.svg';
-import edgeImg from '!!file-loader?name=[name].[ext]!../assets/edgecontrol.svg';
-import rotateImg from '!!file-loader?name=[name].[ext]!../assets/rotateicon.svg';
-import { resolveCanvasAsset, reportCanvasAssetFailure } from '../canvasAsset';
+// 控件图标内联为 data URI：不产出外部文件，消费方零构建配置（详见 README「素材已内联」）
+import verticalSvg from '!!raw-loader!../assets/middlecontrol.svg';
+import horizontalSvg from '!!raw-loader!../assets/middlecontrolhoz.svg';
+import edgeSvg from '!!raw-loader!../assets/edgecontrol.svg';
+import rotateSvg from '!!raw-loader!../assets/rotateicon.svg';
+import { svgDataUri } from '../utils/utils';
+
+const verticalImg = svgDataUri(verticalSvg);
+const horizontalImg = svgDataUri(horizontalSvg);
+const edgeImg = svgDataUri(edgeSvg);
+const rotateImg = svgDataUri(rotateSvg);
 /**
  * 实际场景: 在进行某个对象缩放的时候，由于fabricjs默认精度使用的是toFixed(2)。
  * 此处为了缩放的精度更准确一些，因此将NUM_FRACTION_DIGITS默认值改为4，即toFixed(4).
@@ -27,13 +33,9 @@ function drawImg(ctx, left, top, img, wSize, hSize, angle) {
 // 中间横杠
 function intervalControl() {
   const verticalImgIcon = document.createElement('img');
-  verticalImgIcon.src = resolveCanvasAsset('middlecontrol.svg', verticalImg);
-  verticalImgIcon.onerror = () =>
-    reportCanvasAssetFailure('middlecontrol.svg', verticalImgIcon.src);
+  verticalImgIcon.src = verticalImg;
   const horizontalImgIcon = document.createElement('img');
-  horizontalImgIcon.src = resolveCanvasAsset('middlecontrolhoz.svg', horizontalImg);
-  horizontalImgIcon.onerror = () =>
-    reportCanvasAssetFailure('middlecontrolhoz.svg', horizontalImgIcon.src);
+  horizontalImgIcon.src = horizontalImg;
   function renderIcon(ctx, left, top, styleOverride, fabricObject) {
     drawImg(ctx, left, top, verticalImgIcon, 20, 25, fabricObject.angle);
   }
@@ -81,8 +83,7 @@ function intervalControl() {
 // 顶点
 function peakControl() {
   const img = document.createElement('img');
-  img.src = resolveCanvasAsset('edgecontrol.svg', edgeImg);
-  img.onerror = () => reportCanvasAssetFailure('edgecontrol.svg', img.src);
+  img.src = edgeImg;
   function renderIconEdge(ctx, left, top, styleOverride, fabricObject) {
     drawImg(ctx, left, top, img, 25, 25, fabricObject.angle);
   }
@@ -160,8 +161,7 @@ function peakControl() {
 // 旋转
 function rotationControl() {
   const img = document.createElement('img');
-  img.src = resolveCanvasAsset('rotateicon.svg', rotateImg);
-  img.onerror = () => reportCanvasAssetFailure('rotateicon.svg', img.src);
+  img.src = rotateImg;
   function renderIconRotate(ctx, left, top, styleOverride, fabricObject) {
     drawImg(ctx, left, top, img, 40, 40, fabricObject.angle);
   }

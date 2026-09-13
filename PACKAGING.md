@@ -25,26 +25,23 @@
 ```
 dist/
 ├── vue-fabric-editor/
-│   ├── vue-fabric-editor.common.js    # CJS 主入口
+│   ├── vue-fabric-editor.common.js    # CJS 主入口（控件图标已内联为 data URI）
 │   ├── vue-fabric-editor.umd.js       # UMD
 │   ├── vue-fabric-editor.umd.min.js   # UMD 压缩
-│   ├── vue-fabric-editor.css          # 主库样式
-│   ├── *.svg                          # 控制条/锁/多边形控件图标（5 个，约 5.7KB）
-│   └── img/                           # 滤镜预设缩略图（8 个，约 434KB）
+│   ├── vue-fabric-editor.css          # 主库样式（滤镜缩略图经相对 url() 引用）
+│   └── img/                           # 滤镜缩略图（css-loader 产出，带 hash；宿主 CSS 管线自动处理）
 └── fabric-renderer/
     ├── fabric-renderer.common.js      # CJS 主入口
     ├── fabric-renderer.umd.js         # UMD
     ├── fabric-renderer.umd.min.js     # UMD 压缩
     └── fabric-renderer.css            # 渲染器样式
-
-loader/                                # 随包发布的宿主接入工具（构建期使用，非运行时）
-├── assets-loader.js                   # 画布素材 URL 改写 loader
-└── webpack-plugin.js                  # 宿主接入 plugin（一行接入，见 §4.5）
 ```
 
 （另有各目录下的 `demo.html`，仅本地演示用，不影响消费。）
 
-> ⚠️ 主库产物内含 13 个**外部素材引用**（上述 `*.svg` + `img/*.png`），宿主必须按 §4.5 接入 plugin，否则会出现「选中元素即报 drawImage InvalidStateError」。渲染包产物不含外部素材，无需接入。
+> ✅ **1.0.4 起：画布素材已内联**。5 个控件图标在 JS 内联为 data URI，8 张滤镜缩略图经 CSS 相对
+> `url()` 引用（宿主 CSS 管线自动产出/重写），消费方**零素材接入配置**——历史版本的
+> `VfeAssetsPlugin` / `assetsBaseUrl` 已移除（详见 §4.5）。渲染包产物不含任何素材。
 
 > ⚠️ `dist/` **根目录**还会出现 `npm run build` 的应用站点产物（`index.html`、`js/`、`css/`、`fonts/`、`favicon.ico`、根级 svg 等）。
 > 它们不是交付物：`files` 只列两个 lib 子目录，故不会被打进 npm 包（详见 §2）。
@@ -63,7 +60,7 @@ loader/                                # 随包发布的宿主接入工具（构
   "module": "dist/vue-fabric-editor/vue-fabric-editor.common.js",
   "types":  "types/index.d.ts",
   "style":  "dist/vue-fabric-editor/vue-fabric-editor.css",
-  "files":  ["dist/vue-fabric-editor", "dist/fabric-renderer", "loader", "types", "fabric-renderer.js"],
+  "files":  ["dist/vue-fabric-editor", "dist/fabric-renderer", "types", "fabric-renderer.js"],
   "sideEffects": ["**/*.css", "**/*.less", "**/*.vue"],
   "exports": {
     ".": {
@@ -80,9 +77,6 @@ loader/                                # 随包发布的宿主接入工具（构
       "default": "./dist/fabric-renderer/fabric-renderer.common.js"
     },
     "./fabric-renderer/style": "./dist/fabric-renderer/fabric-renderer.css",
-    "./assets-loader": "./loader/assets-loader.js",
-    "./webpack-plugin": "./loader/webpack-plugin.js",
-    "./loader/*": "./loader/*",
     "./package.json": "./package.json"
   },
   // TS < 4.7（不识别 exports 的 types 条件）按子路径回退解析
@@ -110,12 +104,13 @@ loader/                                # 随包发布的宿主接入工具（构
 
 ### 2.2 peerDependencies（两栈一致）
 
-产物把运行时依赖全部 external，外部项目（无论 webpack4 还是现代栈）都需自行提供。
-peer 列表**与产物真实 `require` 一一对应（17 个）**：
+产物把运行时依赖全部 external（`svg-path-editor-lib` 除外——1.0.4 起为纯函数库已打包进产物，
+放 `dependencies`），外部项目（无论 webpack4 还是现代栈）都需自行提供。
+peer 列表**与产物真实 `require` 一一对应（16 个）**：
 
 `vue`、`@vue/composition-api`、`view-design`、`fabric`、`lodash-es`、`number-precision`、
 `events`、`tapable`、`uuid`、`hotkeys-js`、`jsbarcode`、`qr-code-styling`、`fontfaceobserver`、
-`svg-path-editor-lib`、`vue-i18n`、`vue-cropper`、`@webtoon/psd`（完整清单见 [package.json](./package.json) `peerDependencies`）。
+`vue-i18n`、`vue-cropper`、`@webtoon/psd`（完整清单见 [package.json](./package.json) `peerDependencies`）。
 
 > 只用 `fabric-renderer` 的项目只需其中 9 个：`vue`、`@vue/composition-api`、`fabric`、`events`、
 > `tapable`、`uuid`、`fontfaceobserver`、`jsbarcode`、`qr-code-styling`。
@@ -237,136 +232,42 @@ import '@chenyican/vue-fabric-editor/dist/fabric-renderer/fabric-renderer.css';
 | 渲染器 JS | `import { RendererCore } from '@chenyican/vue-fabric-editor/fabric-renderer'` | 相同（走 stub） |
 | 渲染器 CSS | `import '@chenyican/vue-fabric-editor/fabric-renderer/style'` | `import '@chenyican/vue-fabric-editor/dist/fabric-renderer/fabric-renderer.css'` |
 
-### 4.5 画布素材资源与宿主接入契约（必读）
+### 4.5 画布素材：已内联（1.0.4+），消费方零配置
 
-> 这一节描述的是**无法从 API 文档看出来的隐性契约**：不接入会导致「选中/拖动元素就报错、控制条图标消失」，且报错信息（`InvalidStateError: drawImage ... width or height of 0`）与真实原因相距很远。
+> **1.0.3 及以前**：13 个画布素材（5 个控件图标 svg + 8 张滤镜缩略图 png）经 JS 侧 file-loader 引用，
+> URL 在 lib 构建期烘焙 + 运行时 `setPublicPath` 改写，宿主必须挂 `VfeAssetsPlugin` 或配
+> `assetsBaseUrl`，否则控制条图标 404 → `drawImage InvalidStateError`。
+> **该契约在 1.0.4 起废除**，本节只保留迁移说明与实现原理。
 
-#### 问题本体
+#### 现状（1.0.4+）
 
-主库产物 `dist/vue-fabric-editor/vue-fabric-editor.common.js` 由 `vue-cli --target lib` 构建，内嵌 `setPublicPath.js`，会在浏览器端把 webpack runtime 的 `__webpack_require__.p` 覆盖为「当前 script 所在目录」（即宿主的 chunk 目录）。而产物里 13 个画布素材用的是 file-loader 的 URL 形式：
-
-| 素材 | 数量 | 引用形式 | 文件名（稳定命名，不带 hash） |
-| --- | --- | --- | --- |
-| 控制条 / 锁 / 多边形控件图标 | 5 | `__webpack_require__.p + "xxx.svg"` | `middlecontrol.svg`、`middlecontrolhoz.svg`、`edgecontrol.svg`、`rotateicon.svg`、`lock.svg`（产物根） |
-| 滤镜预设缩略图（合计约 434KB） | 8 | `__webpack_require__.p + "img/xxx.png"` | `img/BlackWhite.png`、`img/Brownie.png`、`img/Invert.png`、`img/Kodachrome.png`、`img/Polaroid.png`、`img/Sepia.png`、`img/technicolor.png`、`img/Vintage.png` |
-
-宿主 webpack **不会**把 node_modules 内「未被 require 的包内文件」复制到自己的输出目录，于是运行时会去请求 `<宿主 chunk 目录>/xxx.svg` → 404 → 图标 broken → fabric 渲染控制条时 `ctx.drawImage(img)` 抛 `InvalidStateError`。
-
-> 注意：`fabric-renderer` 产物**不含**任何外部素材，前台渲染场景无需本契约。
-
-> 素材采用**稳定命名**（不带 contenthash），因此两种接入方式下的路径都是可预期的；素材内容变更不会改变 URL（缓存策略由消费方的 publicPath/CDN 决定）。
-
-#### 接入方式（webpack，一行）
-
-把包内置的 plugin 挂上即可（它向宿主 webpack 注入一条 `enforce: 'pre'` 的规则，把上述 URL 改写为「相对该产物文件的 require」，交给**宿主** file-loader 输出，URL 跟随宿主 publicPath）：
-
-```js
-// vue-cli（vue.config.js）
-const VfeAssetsPlugin = require('@chenyican/vue-fabric-editor/loader/webpack-plugin.js');
-module.exports = {
-  configureWebpack: { plugins: [new VfeAssetsPlugin()] },
-};
-```
-
-```js
-// 纯 webpack
-const VfeAssetsPlugin = require('@chenyican/vue-fabric-editor/loader/webpack-plugin.js');
-module.exports = { plugins: [new VfeAssetsPlugin()] };
-```
-
-同时消费 UMD 产物（`vue-fabric-editor.umd.js`）时：
-
-```js
-new VfeAssetsPlugin({ test: /vue-fabric-editor\.(common|umd)\.js$/ });
-```
-
-不使用 plugin、手写等价规则的场合（效果相同）：
-
-```js
-config.module
-  .rule('vfe-assets')
-  .test(/vue-fabric-editor\.common\.js$/)
-  .enforce('pre')
-  .use('vfe-assets')
-  .loader(require.resolve('@chenyican/vue-fabric-editor/loader/assets-loader.js'))
-  .end();
-```
-
-#### 非 webpack 打包器：运行时素材基址（与上一节二选一）
-
-Vite / Rollup / esbuild 等非 webpack 栈没有 file-loader，改用**运行时素材基址**：库内所有素材走
-`resolveCanvasAsset(相对路径, fallback)`，配置了基址就用基址拼装（相对路径即稳定文件名），否则回退到
-file-loader 产物（webpack 插件路径）：
-
-```js
-import Vue from 'vue';
-import VueCompositionAPI from '@vue/composition-api';
-import { installRuntime } from '@chenyican/vue-fabric-editor';
-
-installRuntime({
-  vue: Vue,
-  compositionApi: VueCompositionAPI,
-  // 目录字符串（自动补 /）或 (relativePath) => url 函数
-  assetsBaseUrl: '/static/vfe-assets/',
-  // 或 CDN：
-  // assetsBaseUrl: 'https://cdn.jsdelivr.net/npm/@chenyican/vue-fabric-editor@1.0.3/dist/vue-fabric-editor/',
-});
-```
-
-也可以单独配置（只关心素材时）：
-
-```js
-import { setCanvasAssetsBaseUrl } from '@chenyican/vue-fabric-editor';
-setCanvasAssetsBaseUrl('/static/vfe-assets/');
-```
-
-**消费方需要把素材托管到该基址**（一次拷贝，任何构建工具都能做：npm script / copy 插件 / 静态目录）：
-
-```
-# 拷贝到项目静态目录（示例）
-cp -r node_modules/@chenyican/vue-fabric-editor/dist/vue-fabric-editor/{*.svg,img} public/static/vfe-assets/
-```
-
-> 若不托管、也不挂插件：素材 404 时库会打印一条**可照做的错误提示**（列出两种接入方式与文档位置），
-> 不再静默失败。
-
-**两条路径天然互斥，无需额外开关**：
-
-| 场景 | 行为 |
-| --- | --- |
-| 挂 `VfeAssetsPlugin`（webpack） | 引用被改写为宿主 require → 素材随宿主构建输出；`assetsBaseUrl` 不会被使用（不冲突） |
-| 未挂插件 + 配置 `assetsBaseUrl` | 复核引用保持原样 → 由运行时基址解析 |
-| 两者都没有 | 保持历史行为（`publicPath` 拼）→ 非 webpack 栈会 404 → 打印明确错误 |
-
-#### 打包器接入决策树
-
-| 打包器 | 推荐方式 | 素材是否需要托管 |
+| 素材 | 引用方式 | 宿主需要做什么 |
 | --- | --- | --- |
-| webpack 4 / 5、vue-cli | `new VfeAssetsPlugin()` | 否（随宿主构建输出） |
-| Vite / Rollup / esbuild（当前） | `installRuntime({ assetsBaseUrl })` | 是（静态目录或 CDN） |
-| 任何打包器（兜底，不挂任何插件） | `installRuntime({ assetsBaseUrl })` | 是 |
+| 5 个控件图标（`middlecontrol` / `middlecontrolhoz` / `edgecontrol` / `rotateicon` / `lock`） | `!!raw-loader!` 导入源码 → `svgDataUri()` 转为 data URI，直接赋给 `img.src` 供 `ctx.drawImage` | **什么都不用做**（data URI 无外部请求） |
+| 8 张滤镜缩略图（`Filters.vue` 面板） | 组件内以 CSS 类（`.filter-thumb--<Name>`）经相对 `url()` 引用；lib 构建产出带 hash 的 `img/*.png` | **什么都不用做**：宿主 import 本包 CSS 时，宿主 css-loader 会重新解析相对 url，用宿主 file-loader 重新产出并按宿主 publicPath 重写 |
 
-> 长期演进（见 §8）：lib 增加 ESM 产物并改用 `new URL('./x.svg', import.meta.url)` 后，
-> 现代打包器可零配置处理素材，届时插件与基址都可以退役。
+因此 `loader/`（assets-loader / webpack-plugin）、`installRuntime({ assetsBaseUrl })`、
+`setCanvasAssetsBaseUrl` / `resolveCanvasAsset` 导出均已移除。升级到 1.0.4 的消费方请：
 
-#### 契约条目（接入方必须满足）
+1. 删除 `vue.config.js` 里的 `VfeAssetsPlugin` 配置（不删会报 `Cannot find module '.../loader/webpack-plugin.js'`，这是预期的显性提示）；
+2. 删除 `installRuntime` 调用里的 `assetsBaseUrl` 选项（传入会被静默忽略，仅为兼容保留）。
 
-1. **webpack 项目必须挂载 `VfeAssetsPlugin`（或等价手写规则）**，且规则需为 `enforce: 'pre'`；非 webpack 项目必须配置 `assetsBaseUrl` 并托管素材（见上一节）。
-2. 宿主需能解析到 `file-loader`（vue-cli 4/5 默认自带）。解析失败时 loader 会抛出明确报错；也可 `new VfeAssetsPlugin({ fileLoader: require.resolve('file-loader') })` 显式指定。
-3. **不要**对 `node_modules` 内的 `.svg` / `.png` 施加「转成 Vue 组件」之类的规则——那会让 require 结果不是 URL 字符串。若宿主有 svg→组件的规则（如 `vue-svg-loader`），请确认其 `exclude` 掉了本包路径，或把本 plugin 的 `test` 收窄到本产物文件（默认已收窄）。
-4. 插件路径仅适用于 **webpack**；其它打包器走 `assetsBaseUrl`（跨打包器通用）。
-5. 素材会随宿主构建输出（webpack）或从基址加载（其它栈），体积约 434KB（其中 8 张滤镜缩略图约 430KB）；若需按需加载可自行处理（详见 §8 演进）。
+#### 为什么 CSS 引用不需要特殊处理（原理）
 
-#### 排查清单
+JS 侧的 `file-loader` URL 在 **lib 构建期烘焙成字符串**，运行时宿主无法再干预；
+而 CSS 里的相对 `url()` 在宿主 `import` 该 CSS 时会**被宿主的 css-loader 重新解析**——
+node_modules 内的图片文件经宿主 file-loader 重新产出、URL 按宿主 publicPath 重写。
+所以「把引用挪进 CSS」= 把资源的处理权交还宿主构建链，这正是本方案零配置的原因。
+
+前提：宿主通过打包管线 import CSS（vue-cli / webpack / Vite 默认行为）；直接 `<link>` 引
+node_modules 内 CSS 而不经打包的场景不受支持。
+
+#### 遗留排查（仅针对升级未清理的宿主）
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| 选中元素即报 `InvalidStateError ... width or height of 0` | 素材 URL 404，图标 broken | webpack：确认 plugin 已挂载、`test` 命中产物文件；其它栈：确认 `assetsBaseUrl` 已配置且素材已托管 |
-| 控制台出现 `[vfe] 画布素材加载失败（xxx）` | 素材 404（库自带的明确报错） | 按提示二选一：挂 `VfeAssetsPlugin` 或配置 `assetsBaseUrl` |
-| Network 面板见 `<publicPath>/xxx.svg` 404 | 同上 | 同上 |
-| 构建报 `Cannot find module 'file-loader'` | 宿主未安装 file-loader | 安装 file-loader 或用 `{ fileLoader }` 指定 |
-| 构建报 `Cannot read properties of undefined (reading 'call')` | loader 实现被改成「就地 require」（未提升到顶层） | 使用包内置 loader，勿自行改写其实现 |
-| 图标变成了 Vue 组件/对象 | 宿主 svg 规则命中了本包 | 见契约第 3 条 |
+| 构建报 `Cannot find module '.../loader/webpack-plugin.js'` | 宿主仍挂着已移除的 `VfeAssetsPlugin` | 删除该 plugin 配置 |
+| 滤镜缩略图 404（`url(img/xxx.png)`） | 宿主 CSS 管线未处理包内 CSS（如直接 `<link>` 引 node_modules 文件） | 改为经打包器 import CSS；或把 `dist/vue-fabric-editor/img/` 与 CSS 部署到同目录 |
 
 ### 4.6 运行时单实例注入接口（推荐接入方式）
 
@@ -582,12 +483,13 @@ git push --follow-tags      # 推送 tag → 触发 CI 自动发布（见 §6.6�
 - **产物为 CJS / UMD，非真正 ESM**：由 webpack4（vue-cli）构建，现代栈虽能通过 `exports` 使用，但**无法 tree-shaking**，编辑器包较大（min 约 550KB）。若外部多为 Vite / TS 项目，建议后续迁移构建链至 **Vite / Rollup library mode** 产出 ESM，并靠 `exports` 的 `import`/`require` 条件分发表述。
 - **类型声明为手写**：`types/index.d.ts` 与 `types/fabric-renderer.d.ts` 覆盖组件 Props / 事件 / 命令式 `api` / adapters / extensions 与主要具名导出；引擎与插件的深层内部类型保持 `any`。**源码 API 变更后需同步更新这两个文件**（暂未接入 `tsc` / `vue-tsc` 自动生成，`npm run lint` 不会校验它们）；待 ESM 化时可改为自动生成。
 - **webpack4 的 CSS 无法走子路径**：只能用完整相对路径（见 §4.3）。
-- **peer 依赖较多（17 个，已与产物 `require` 对齐）**：externals 覆盖的包统一放在 `peerDependencies`；`dependencies` 只保留真正打进 bundle 的 `axios` / `colord`（与演示站点用的 `vue-router`）；仅演示站点/示例用到的 `qs` / `dayjs` / `vue-lazyload` / `vue-masonry` 放在 `devDependencies`，消费方无需安装。npm 7+ 会自动安装 peers，npm 6 需业务侧自行安装（见 §2.2）。
-- **主库产物含 13 个外部素材（约 440KB）**：控制条/锁/多边形图标 5 个（约 5.7KB）+ 滤镜预设缩略图 8 个（约 430KB）。宿主须按 **§4.5 接入 plugin** 才能正确加载。
-  **演进方向（未实施）**：
-  1. 压缩这 8 张缩略图——当前显示宽度仅约 120px，却按 47~59KB/张发布；改为「显示宽度 ×2 的 WebP（q≈78）」预计可降到 25~60KB（合计），或将缩略图改为**运行时用 fabric 滤镜生成 + 缓存**，可把素材降到近乎 0；
-  2. 素材按需加载/独立分发（CDN 固定基址或独立素材包），使主包与宿主静态资源不再强绑定；
-  3. 长期：lib 构建链迁到 Vite/Rollup 产出 ESM 时，可一并把素材改为 `import ... ?url` 语义，由宿主统一处理（届时 §4.5 的 plugin/loader 可退役）。
+- **peer 依赖较多（16 个，已与产物 `require` 对齐）**：externals 覆盖的包统一放在 `peerDependencies`；`dependencies` 保留真正打进 bundle 的 `axios` / `colord` / `svg-path-editor-lib`（1.0.4 起打包进产物并经 babel 转译为 ES5，消费方 webpack4 无需再转译）与演示站点用的 `vue-router`；仅演示站点/示例用到的 `qs` / `dayjs` / `vue-lazyload` / `vue-masonry` 放在 `devDependencies`，消费方无需安装。npm 7+ 会自动安装 peers，npm 6 需业务侧自行安装（见 §2.2）。
+- **画布素材已内联（1.0.4+，消费方零配置）**：5 个控件图标在 JS 内联为 data URI（约 +8KB）；
+  8 张滤镜缩略图经 CSS 相对 `url()` 引用、由宿主 CSS 管线产出（`img/*.png`，约 430KB，随宿主部署按需加载，
+  不占 JS bundle）。原 `VfeAssetsPlugin` / `assetsBaseUrl` 契约已废除（见 §4.5 迁移说明）。
+  **演进方向（未实施）**：压缩这 8 张缩略图——当前显示宽度仅约 120px，却按 47~59KB/张发布；
+  改为「显示宽度 ×2 的 WebP（q≈78）」预计可降到 25~60KB（合计），或将缩略图改为
+  **运行时用 fabric 滤镜生成 + 缓存**，可把素材降到近乎 0。
 
 ---
 
@@ -606,7 +508,6 @@ git push --follow-tags      # 推送 tag → 触发 CI 自动发布（见 §6.6�
 **Q4：构建顺序/产物被覆盖？**
 两个 lib 构建必须各自 `--dest`（已配置）。发布前先后执行两者，`dist/` 内两个子目录应都在。
 
-**Q5：运行时选中/拖动元素就报 `InvalidStateError: Failed to execute 'drawImage' ... width or height of 0`？**
-典型的「画布素材 URL 404」：控制条图标加载失败成 broken image，fabric 渲染控制条时 `drawImage` 抛错。
-排查：打开 Network 面板，看是否有 `<宿主 publicPath>/xxx.svg` 或 `img/xxx.png` 返回 404；再确认宿主已按
-**§4.5** 接入 `VfeAssetsPlugin`（且 `test` 命中产物文件名，规则为 `enforce: 'pre'`）。
+**Q5：升级 1.0.4 后构建报 `Cannot find module '.../loader/webpack-plugin.js'`？**
+1.0.4 起画布素材已内联，`VfeAssetsPlugin` / assets-loader 已随包移除（见 §4.5）。
+删除消费项目 vue.config.js 里的 `VfeAssetsPlugin` 配置即可。

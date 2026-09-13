@@ -23,7 +23,9 @@ const libExternals = {
   'hotkeys-js': 'hotkeys-js',
   jsbarcode: 'jsbarcode',
   'qr-code-styling': 'qr-code-styling',
-  'svg-path-editor-lib': 'svg-path-editor-lib',
+  // svg-path-editor-lib 不做 external：纯函数库（无实例共享问题），打包进产物并经
+  // transpileDependencies 转译为 ES5 —— 消费方（尤其 webpack4）无需再解析其 ES2022 产物，
+  // 也无需 transpileDependencies 配置。
   'number-precision': 'number-precision',
   events: 'events',
   tapable: 'tapable',

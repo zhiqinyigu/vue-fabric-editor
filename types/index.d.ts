@@ -351,26 +351,12 @@ export declare function installRuntime(options: {
   compositionApi?: any;
   CompositionApi?: any;
   api?: any;
-  /**
-   * 非 webpack 打包器下的画布素材基址（字符串目录或 (relativePath) => url 函数）。
-   * 需把包内 dist/vue-fabric-editor 下的素材托管到该基址。webpack 项目请改用 VfeAssetsPlugin。
-   */
+  /** @deprecated 画布素材已内联，传入会被忽略 */
   assetsBaseUrl?: string | ((relativePath: string) => string);
 }): boolean;
 
 /** 是否已调用过 `installRuntime` 完成注入 */
 export declare function isRuntimeInjected(): boolean;
-
-/**
- * 单独设置画布素材基址（等价于 installRuntime({ assetsBaseUrl })）
- * @param baseUrl 目录字符串（自动补 /）、(relativePath) => url 函数，或 null 清除
- */
-export declare function setCanvasAssetsBaseUrl(
-  baseUrl: string | ((relativePath: string) => string) | null
-): void;
-
-/** 解析画布素材 URL（已配置基址时用基址拼装，否则返回 fallbackUrl） */
-export declare function resolveCanvasAsset(relativePath: string, fallbackUrl?: string): string;
 
 /* ============ 内置可覆盖组件（UI 注册表 key） ============ */
 

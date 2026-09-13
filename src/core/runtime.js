@@ -45,8 +45,6 @@
  * （如 `src/lib/i18n.js`）显式使用 `getVue()`。
  */
 
-import { setCanvasAssetsBaseUrl } from './canvasAsset';
-
 // 注入的实例（消费方提供）
 let injectedVue = null;
 let injectedCompositionApi = null;
@@ -77,20 +75,17 @@ function warnFallbackOnce(what) {
 /**
  * 注入消费方的单例实例（幂等，可重复调用）
  *
- * 除 `vue` / `compositionApi` 外，还支持 `assetsBaseUrl`：非 webpack 打包器下
- * 指定画布素材基址（详见 src/core/canvasAsset.js 与 PACKAGING.md §4.5）。
+ * 注：历史版本的 `assetsBaseUrl` 选项已随「画布素材内联」废弃——传入会被静默忽略。
  *
- * @param {{ vue?: Object, Vue?: Object, compositionApi?: Object, CompositionApi?: Object, assetsBaseUrl?: string|Function }} options
+ * @param {{ vue?: Object, Vue?: Object, compositionApi?: Object, CompositionApi?: Object }} options
  * @returns {boolean} 是否至少生效了一项
  */
 export function installRuntime(options = {}) {
   const vue = options.vue || options.Vue;
   const compositionApi = options.compositionApi || options.CompositionApi || options.api;
-  const assetsBaseUrl = options.assetsBaseUrl || options.canvasAssetsBaseUrl;
   if (vue) injectedVue = vue;
   if (compositionApi) injectedCompositionApi = compositionApi;
-  if (assetsBaseUrl) setCanvasAssetsBaseUrl(assetsBaseUrl);
-  if (!vue && !compositionApi && !assetsBaseUrl) return false;
+  if (!vue && !compositionApi) return false;
 
   // 把注入的 composition-api 装到注入的 Vue 上：显式且幂等，不依赖其 window.Vue 自安装
   if (injectedVue && injectedCompositionApi && typeof injectedVue.use === 'function') {
