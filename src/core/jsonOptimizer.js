@@ -111,9 +111,10 @@ export function patchImageCrossOrigin(json, crossOrigin = 'anonymous') {
   return json;
 }
 
-// 远程图片「按接入域名分片缓存」：递归给 objects 中远程 URL 追加分片参数。
+// 远程图片「按接入域名分片缓存」：递归给 objects 中远程 URL 设置分片参数。
 // 覆盖 image 元素 src 与背景 tile 形态的 fill.source（pattern 序列化 URL）；
-// data: / 变量占位符 / 已含同参数自动跳过（幂等）。仅请求态存在，保存端对称移除。
+// data: / 变量占位符跳过；已含同参数则改写为当前取值（修正存量数据里固化的旧域名）。
+// 仅请求态存在，保存端由 removeImagesCacheBustParam 对称移除。
 export function appendImagesCacheBustParam(json, config) {
   if (!json || !Array.isArray(json.objects)) return json;
   const walk = (items) => {

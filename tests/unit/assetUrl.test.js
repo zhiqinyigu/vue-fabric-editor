@@ -80,12 +80,27 @@ describe('分片缓存参数（按接入域名，feDomain）', () => {
     ).toBe('https://cdn.example.com/a.png?v=1&feDomain=x%20y#c');
   });
 
-  it('append：幂等（已存在同参数不重复追加，大小写不敏感）', () => {
+  it('append：已存在同参数则改写取值（以当前接入域名为准），不重复追加', () => {
+    // 存量 JSON 里固化的旧域名必须被改写，否则会一直按旧域名分片/缓存 CORS 头
+    // （其它参数、参数顺序、参数名大小写、hash 均原样保留）
     expect(
       appendCacheBustParam('https://cdn.example.com/a.png?FEDomain=host-a', {
         getValue: () => 'host-b',
       })
-    ).toBe('https://cdn.example.com/a.png?FEDomain=host-a');
+    ).toBe('https://cdn.example.com/a.png?FEDomain=host-b');
+    expect(
+      appendCacheBustParam('https://cdn.example.com/a.png?w=1&feDomain=host-a#frag', {
+        getValue: () => 'host-b',
+      })
+    ).toBe('https://cdn.example.com/a.png?w=1&feDomain=host-b#frag');
+  });
+
+  it('append：取值相同时原样返回（等价旧幂等语义）', () => {
+    expect(
+      appendCacheBustParam('https://cdn.example.com/a.png?feDomain=host-a', {
+        getValue: () => 'host-a',
+      })
+    ).toBe('https://cdn.example.com/a.png?feDomain=host-a');
   });
 
   it('append：非远程/关闭/空值原样返回；自定义参数名生效', () => {

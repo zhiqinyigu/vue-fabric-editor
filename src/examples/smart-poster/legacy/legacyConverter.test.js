@@ -1119,13 +1119,18 @@ describe('convertLegacyPoster：分片缓存参数（按接入域名）', () => 
     );
   });
 
-  it('已含 feDomain 的 URL 幂等（不重复追加）', async () => {
+  it('已含 feDomain 的 URL 按当前取值改写（修正存量固化的旧域名）', async () => {
     const captured = spyCapture();
-    await convertLegacyPoster(
+    const json = await convertLegacyPoster(
       { background: 'https://cdn.example.com/bg.png?feDomain=host-a' },
       { data: {}, cacheBust: { getValue: () => 'host-b' } }
     );
-    expect(captured).toEqual(['https://cdn.example.com/bg.png?feDomain=host-a']);
+    // 测量加载改用当前域名分片：否则测量与渲染会落在不同分片（CORS 头可能只对其中一个放行）
+    expect(captured).toEqual(['https://cdn.example.com/bg.png?feDomain=host-b']);
+    // JSON 存储态仍原样（请求态参数的清理由 getJson / removeImagesCacheBustParam 负责）
+    expect(json.objects.find((o) => o.id === 'backgroundImage').src).toBe(
+      'https://cdn.example.com/bg.png?feDomain=host-a'
+    );
   });
 });
 

@@ -1,6 +1,6 @@
 {
   "name": "@chenyican/vue-fabric-editor",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": false,
   "description": "基于 Vue2.6 + Fabric.js 的图片设计编辑器（移植自 ikuaitu/vue-fabric-editor）",
   "license": "MIT",

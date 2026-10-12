@@ -412,8 +412,8 @@ export async function convertLegacyPoster(posterConfig, options = {}) {
   // 背景图（决定海报尺寸；加载失败则退回配置尺寸/包围盒）
   let bgSize = null;
   if (config.background) {
-    // 转换期的背景测量加载也是真实请求：URL 追加分片参数，与渲染期 loadJSON 追加同一 shard，
-    // 避免 CDN 按域名分片缓存被绕过；JSON 中 src 保持干净 URL，渲染期由 loadJSON 幂等重追加。
+    // 转换期的背景测量加载也是真实请求：URL 按当前接入域名设置分片参数，与渲染期 loadJSON 同 shard，
+    // 避免 CDN 按域名分片缓存被绕过；JSON 中 src 保持存储态原样，渲染期由 loadJSON 重设分片参数。
     const bgRequestUrl = appendCacheBustParam(config.background, cacheBust);
     try {
       const img = await loadImage(bgRequestUrl, imageLoader);
@@ -591,7 +591,7 @@ export async function convertLegacyPoster(posterConfig, options = {}) {
       continue;
     }
     try {
-      // 素材图测量加载同样追加分片参数（真实请求）；JSON src 保持干净，渲染期由 loadJSON 幂等重追加
+      // 素材图测量加载同样按当前接入域名设置分片参数（真实请求）；JSON src 保持存储态原样
       const img = await loadImage(appendCacheBustParam(src, cacheBust), imageLoader);
       const nw = img.naturalWidth || img.width || 0;
       const nh = img.naturalHeight || img.height || 0;

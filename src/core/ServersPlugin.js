@@ -89,8 +89,11 @@ class ServersPlugin {
       callback && callback();
       return;
     }
-    // 确保元素存在id
-    const temp = typeof jsonFile === 'string' ? JSON.parse(jsonFile) : jsonFile;
+    // 确保元素存在id。对象入参必须克隆：加载管线会原地改写（资源清单展开 / 缺省字段补回 /
+    // crossOrigin 补丁 / feDomain 请求态参数），若直接引用调用方对象，请求态参数会反向
+    // 污染业务数据（预览渲染后回显/再次保存即把 feDomain 固化进存储）。
+    const temp =
+      typeof jsonFile === 'string' ? JSON.parse(jsonFile) : JSON.parse(JSON.stringify(jsonFile));
     // 资源清单还原：assetId 引用 -> 内联 src（供 hookTransform / loadFromJSON 使用）
     this._expandAssetManifest(temp);
     // 精简 JSON 缺省字段补回（与 getJson 的 strip 对称，保证 1:1 还原）
@@ -100,8 +103,9 @@ class ServersPlugin {
     if (crossOrigin) {
       patchImageCrossOrigin(temp, crossOrigin);
     }
-    // 远程图片「按接入域名分片缓存」：加载前给远程 URL 追加 feDomain=当前接入域名（请求态分片，
-    // CDN 按域名分片返回 access-control-allow-* 并隔离缓存）；JSON 存储态保持干净 URL，
+    // 远程图片「按接入域名分片缓存」：加载前把远程 URL 的 feDomain 设为当前接入域名（请求态分片，
+    // CDN 按域名分片返回 access-control-allow-* 并隔离缓存）；URL 上已有该参数时会按当前域名改写
+    // （存量 JSON 里固化的旧域名不能继续生效）；JSON 存储态保持干净 URL，
     // getJson 保存时对称移除；editor.options.cacheBust 传 false 可关闭，传 { param, getValue } 可自定义
     appendImagesCacheBustParam(
       temp,

@@ -27,6 +27,7 @@ const ALLOWLIST = new Set([
   '@/lib/renderer', // → 运行时出口（appendCacheBustParam 等）
   '@/core/variableEngine', // → 运行时出口（extractVariables 等）
   '@/core/imageLoader', // → 运行时出口（loadImageResilient 等）
+  '@/core/jsonOptimizer', // → 运行时出口（removeImagesCacheBustParam 等，渲染器出口已带出）
   '@/mixins/user-mixins', // → 库仓库演示专用，业务需替换为自身实现
   '@/utils/network', // → 库仓库演示专用，业务需替换为自身实现
   '@/utils', // → 库仓库演示专用，业务需替换为自身实现

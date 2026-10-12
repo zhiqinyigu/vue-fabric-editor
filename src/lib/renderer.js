@@ -64,6 +64,8 @@ export {
   normalizeCanvasDefaults,
   stripDefaultFields,
   stripCanvasDefaults,
+  appendImagesCacheBustParam,
+  removeImagesCacheBustParam,
 } from '@/core/jsonOptimizer';
 export { OBJECT_DEFAULTS, getDefaultsForType } from '@/core/objectDefaults';
 export {

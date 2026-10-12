@@ -11,7 +11,8 @@
  * 请求 URL 追加 feDomain=<location.hostname> 后，CDN 按「完整 URL（含参数）」分片缓存：
  * 不同接入域名互不命中，既避开脏缓存，又允许各域名利用自己的合法缓存。
  * 参数仅在真实请求态存在（loadJSON / 插图 / 设背景），JSON 存储态保持干净 URL，
- * 保存时由 removeImagesCacheBustParam 对称移除。
+ * 保存时由 removeImagesCacheBustParam 对称移除。请求态取值以「当前接入域名」为准：
+ * URL 上已存在同名参数（例如存量 JSON 里固化的旧域名）时会被改写，见 appendCacheBustParam。
  *
  * TODO(防盗链验签): 含签名参数的 CDN URL 追加分片参数后可能验签失败，
  * 服务端把分片参数纳入签名白名单前，签名 URL 的分片缓存策略待定。
@@ -72,19 +73,29 @@ function normalizeCacheBustConfig(config) {
   return { param, getValue };
 }
 
-// 给远程 URL 追加分片缓存参数（幂等：已存在同参数原样返回；保留 hash；值 encodeURIComponent）
+// 给远程 URL 设置请求态分片缓存参数（保留 hash；值 encodeURIComponent）
+// 取值以「当前接入域名」为准：已存在同名参数但取值不同 → **改写为当前取值**，相同 → 原样返回。
+// 为什么不是"有就跳过"：存量 JSON 可能把请求态参数固化了下来（历史导入/粘贴/旧版后台产物），
+// 若沿用旧值，CDN 会一直按旧域名分片与缓存 CORS 头 —— 白名单再怎么加也放行不了，
+// 表现为"别的域名能出图、本域名跨域失败 → 海报导不出（保存/分享按钮恒灰）"。
+// 改写后请求回到本域名分片，存储态仍由 removeImagesCacheBustParam 对称清除。
 export function appendCacheBustParam(url, config) {
   if (!isRemoteHttpUrl(url)) return url;
   const cfg = normalizeCacheBustConfig(config);
   if (!cfg) return url;
   const value = cfg.getValue();
   if (!value) return url;
-  if (new RegExp('[?&]' + escapeRegExp(cfg.param) + '=', 'i').test(url)) return url;
+  const encoded = encodeURIComponent(String(value));
+  // 已有同名参数：只改值，保留原参数名大小写与参数位置（大小写不敏感匹配）
+  const existing = new RegExp('([?&])(' + escapeRegExp(cfg.param) + ')=[^&#]*', 'i');
+  if (existing.test(url)) {
+    return url.replace(existing, (match, sep, key) => sep + key + '=' + encoded);
+  }
   const hashIdx = url.indexOf('#');
   const base = hashIdx === -1 ? url : url.slice(0, hashIdx);
   const hash = hashIdx === -1 ? '' : url.slice(hashIdx);
   const sep = base.indexOf('?') === -1 ? '?' : '&';
-  return base + sep + cfg.param + '=' + encodeURIComponent(String(value)) + hash;
+  return base + sep + cfg.param + '=' + encoded + hash;
 }
 
 // 移除分片缓存参数（与 append 对称；移除首个参数时把后续 & 还原为 ?；保留 hash）

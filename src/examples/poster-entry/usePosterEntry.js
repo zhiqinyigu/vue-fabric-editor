@@ -7,6 +7,7 @@
  */
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from '@vue/composition-api';
 import { extractVariables } from '@/core/variableEngine';
+import { removeImagesCacheBustParam } from '@/core/jsonOptimizer';
 
 /** 从画布 JSON 中找 workspace 节点 */
 export function findWorkspace(json) {
@@ -66,6 +67,13 @@ export function parsePosterJson(text, field, transform) {
     } catch (e) {
       return { ok: false, error: '数据转换失败：' + (e && e.message) };
     }
+  }
+  // 粘贴入口是「任意外部 JSON 直接入库」的通道，不经编辑器画布 load→save 管线，
+  // getJson 的对称清理管不到这里：粘贴内容若带请求态分片参数（feDomain=来源域名），
+  // 会原样固化进存储 → 各接入域名加载时按旧域名分片请求，跨域失败（导出/保存恒灰）。
+  // 入库前静默清洗为存储态干净 URL（加载端 loadJSON 会按当前域名重设请求态参数）。
+  if (obj && Array.isArray(obj.objects)) {
+    removeImagesCacheBustParam(obj);
   }
   return { ok: true, json: obj };
 }

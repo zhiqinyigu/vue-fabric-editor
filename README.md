@@ -289,7 +289,7 @@ export default {
 | `showSaveButton` | `Boolean` | `true` | 是否显示顶栏「清空 / 保存 / 提交」；业务自持保存时置 `false` |
 | `messageDuration` | `Number` | `5` | 全局 Message 提示时长（秒），`0` 不自动关闭 |
 | `workspace` | `{ width, height }` | — | 初始化画布尺寸；不传由 `WorkspacePlugin` 按容器自适应 |
-| `cacheBust` | `Boolean \| { param, getValue }` | `feDomain=location.hostname` | 远程图按接入域名分片缓存；`false` 关闭。JSON 存储态始终是干净 URL |
+| `cacheBust` | `Boolean \| { param, getValue }` | `feDomain=location.hostname` | 远程图按接入域名分片缓存（请求态：URL 上已有该参数时**按当前域名改写**，避免存量数据里固化的旧域名继续生效）；`false` 关闭。保存时对称移除，JSON 存储态不携带该参数 |
 | `useAssetManifest` | `Boolean` | `false` | 开启资源清单去重，相同素材只存一份 |
 | `crossOrigin` | `String \| null` | `'anonymous'` | 图片跨域策略；`'strict'` 关闭回退（严格 CORS，失败即不显示） |
 
